@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "tldr - link tagger",
+  "version": "0.1.0",
+  "description": "Save links, extract content, tag with LLM, sync to Pinboard.",
+  "action": {
+    "default_title": "tldr settings"
+  },
+  "background": {
+    "service_worker": "background/index.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "notifications",
+    "alarms",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "https://api.pinboard.in/*",
+    "http://localhost:11434/*",
+    "https://api.moonshot.cn/*"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
+  "options_ui": { "page": "options.html", "open_in_tab": true }
+}
