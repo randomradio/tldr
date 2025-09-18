@@ -52,3 +52,24 @@ export async function importTagsFromPinboard(): Promise<number> {
   await updateTags(existing);
   return count;
 }
+
+export interface PinboardPost { url: string; title: string; tags: string[] }
+
+export async function listRecentFromPinboard(count = 50): Promise<PinboardPost[]> {
+  const settings = await getSettings();
+  const token = settings.pinboard.authTokenRef ? await getSecret(settings.pinboard.authTokenRef) : undefined;
+  if (!token) throw new Error('Pinboard token not set');
+  const url = `https://api.pinboard.in/v1/posts/recent?auth_token=${encodeURIComponent(token)}&format=json&count=${Math.max(1, Math.min(100, count))}`;
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) throw new Error(`Pinboard error ${res.status}`);
+  const data = await res.json();
+  const posts = Array.isArray(data?.posts) ? data.posts : [];
+  return posts.map((p: any) => ({
+    url: String(p?.href || ''),
+    title: String(p?.description || p?.href || ''),
+    tags: String(p?.tags || '')
+      .split(/\s+/)
+      .map((t: string) => t.trim().toLowerCase())
+      .filter(Boolean),
+  })).filter((p: PinboardPost) => !!p.url);
+}

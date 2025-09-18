@@ -1,6 +1,7 @@
 import { extractFromActiveTab } from './tabs';
 import { tagAndMaybeSync } from './pipeline';
-import { importTagsFromPinboard } from './pinboard';
+import { importTagsFromPinboard, listRecentFromPinboard } from './pinboard';
+import { exportToGoodlinks, exportToReadwise } from './exporters';
 
 chrome.runtime.onInstalled.addListener(async () => {
   try { await importTagsFromPinboard(); } catch {}
@@ -45,6 +46,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     } else if (msg?.type === 'import-pinboard-tags') {
       const n = await importTagsFromPinboard();
       sendResponse({ ok: true, count: n });
+    } else if (msg?.type === 'list-pinboard-posts') {
+      const count = Math.max(1, Math.min(100, Number(msg.count) || 50));
+      const items = await listRecentFromPinboard(count);
+      sendResponse({ ok: true, items });
+    } else if (msg?.type === 'export-selected') {
+      const items = Array.isArray(msg.items) ? msg.items : [];
+      const targets = msg.targets || {};
+      let goodlinksCount = 0;
+      let readwiseCount = 0;
+      if (targets.goodlinks) goodlinksCount = await exportToGoodlinks(items);
+      if (targets.readwise) readwiseCount = await exportToReadwise(items);
+      sendResponse({ ok: true, goodlinksCount, readwiseCount });
     }
   })().catch((err) => sendResponse({ ok: false, error: String(err) }));
   return true;

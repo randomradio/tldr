@@ -20,6 +20,7 @@
   ],
   "host_permissions": [
     "https://api.pinboard.in/*",
+    "https://readwise.io/*",
     "http://localhost:11434/*",
     "https://api.moonshot.cn/*"
   ],

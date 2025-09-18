@@ -3,6 +3,7 @@ import type { Settings, Item, TagInfo, SyncRecord } from './types';
 const DEFAULT_SETTINGS: Settings = {
   llm: { baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k2-0905-preview', jsonMode: false, maxChars: 4000 },
   pinboard: { shared: true, toread: false },
+  readwise: {},
   tagging: { knownTagLimit: 200, dedupeThreshold: 82, aliases: {} },
   privacy: { mode: 'title_excerpt' },
   advanced: {}

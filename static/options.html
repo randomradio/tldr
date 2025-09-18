@@ -40,6 +40,28 @@
       </div>
     </section>
     <section>
+      <h3>Readwise Reader</h3>
+      <label>API token <input id="readwise_token" class="secret" placeholder="rw_token_..." /></label>
+    </section>
+    <section>
+      <h3>Sync & Export</h3>
+      <div class="actions">
+        <button id="loadFromPin">Load recent from Pinboard</button>
+        <input id="pin_count" type="number" min="1" max="100" value="50" style="width:120px" />
+        <span id="syncStatus"></span>
+      </div>
+      <div class="row" style="grid-template-columns: 1fr 1fr; align-items: center;">
+        <label><input type="checkbox" id="target_goodlinks" checked /> Export to Goodlinks</label>
+        <label><input type="checkbox" id="target_readwise" /> Export to Readwise</label>
+      </div>
+      <div class="actions">
+        <button id="exportSelected">Export selected</button>
+        <button id="selectAll">Select all</button>
+        <button id="clearSelection">Clear</button>
+      </div>
+      <div id="pin_list" style="margin-top:8px"></div>
+    </section>
+    <section>
       <h3>Tagging</h3>
       <div class="row">
         <label>Known tag limit <input id="tag_limit" type="number" min="10" step="10" value="200" /></label>

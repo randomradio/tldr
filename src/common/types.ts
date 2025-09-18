@@ -13,6 +13,9 @@ export interface Settings {
     shared: boolean;
     toread: boolean;
   };
+  readwise?: {
+    apiTokenRef?: string;
+  };
   tagging: {
     knownTagLimit: number;
     dedupeThreshold: number; // 0..100
@@ -46,7 +49,7 @@ export interface TagInfo {
 
 export interface SyncRecord {
   itemId: string;
-  service: 'pinboard';
+  service: 'pinboard' | 'readwise' | 'goodlinks';
   lastHash?: string; // hash of title+tags+url
   status: 'pending' | 'ok' | 'error';
   lastError?: string;
@@ -56,4 +59,3 @@ export interface SyncRecord {
 export type QueueTask =
   | { kind: 'ingest'; tabId: number; windowId?: number }
   | { kind: 'sync_pinboard'; itemId: string };
-
