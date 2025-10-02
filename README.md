@@ -33,3 +33,20 @@ Next Steps
 - Add optional_host_permissions request for your chosen LLM host if it differs from defaults.
 
 # tldr
+
+
+Release
+------
+
+### Chrome Web Store
+1. Update the version in both `package.json` and `static/manifest.json`, then run `pnpm run build`.
+2. Run `pnpm run package` to create `tldr-v<version>.zip`.
+3. Sign in to the Chrome Web Store dashboard, start a new item, and upload the zip.
+4. Provide the required listing assets: the icons in `static/icons` cover the 16–512px sizes; add screenshots before submitting.
+5. Fill in privacy/data collection disclosures and submit for review.
+
+### GitHub Release
+1. Commit changes and tag the release (`git tag v<version> && git push origin v<version>`).
+2. Run `pnpm run build` followed by `pnpm run package` to refresh `tldr-v<version>.zip`.
+3. Draft a release on GitHub, select the tag, list highlights, and attach the zip so users can sideload.
+4. Publish the release when you're ready.
