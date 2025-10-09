@@ -2,6 +2,67 @@ import { getSettings, setSettings, setSecret } from '@common/storage';
 
 function byId<T extends HTMLElement>(id: string) { return document.getElementById(id) as T; }
 
+function originPattern(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}/*`;
+  } catch {
+    return null;
+  }
+}
+
+function containsOriginPermission(pattern: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    chrome.permissions.contains({ origins: [pattern] }, (granted) => {
+      if (chrome.runtime.lastError) {
+        console.warn('Could not check permissions', chrome.runtime.lastError);
+        resolve(false);
+        return;
+      }
+      resolve(Boolean(granted));
+    });
+  });
+}
+
+function requestOriginPermission(pattern: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    chrome.permissions.request({ origins: [pattern] }, (granted) => {
+      if (chrome.runtime.lastError) {
+        console.warn('Permission request failed', chrome.runtime.lastError);
+        resolve(false);
+        return;
+      }
+      resolve(Boolean(granted));
+    });
+  });
+}
+
+function removeOriginPermission(pattern: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    chrome.permissions.remove({ origins: [pattern] }, (removed) => {
+      if (chrome.runtime.lastError) {
+        console.warn('Could not remove permission', chrome.runtime.lastError);
+        resolve(false);
+        return;
+      }
+      resolve(Boolean(removed));
+    });
+  });
+}
+
+function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (chrome.runtime.lastError) {
+        console.warn('Could not query active tab', chrome.runtime.lastError);
+        resolve(undefined);
+        return;
+      }
+      resolve(tabs && tabs.length ? tabs[0] : undefined);
+    });
+  });
+}
+
 async function load() {
   const s = await getSettings();
   byId<HTMLInputElement>('llm_base').value = s.llm.baseUrl;
@@ -17,8 +78,26 @@ async function load() {
 }
 
 async function save() {
+  const statusEl = byId<HTMLDivElement>('status');
+  statusEl.textContent = 'Saving…';
   const newSettings = await getSettings();
-  newSettings.llm.baseUrl = byId<HTMLInputElement>('llm_base').value.trim();
+  const prevBase = newSettings.llm.baseUrl;
+  const prevPattern = originPattern(prevBase);
+
+  const baseInput = byId<HTMLInputElement>('llm_base').value.trim();
+  if (!baseInput) { statusEl.textContent = 'Enter an LLM base URL (including protocol).'; return; }
+  const nextPattern = originPattern(baseInput);
+  if (!nextPattern) { statusEl.textContent = 'The LLM base URL must be a valid absolute URL.'; return; }
+
+  let permissionGranted = false;
+  const alreadyGranted = await containsOriginPermission(nextPattern);
+  if (!alreadyGranted) {
+    const granted = await requestOriginPermission(nextPattern);
+    if (!granted) { statusEl.textContent = `Permission was not granted for ${nextPattern.replace('/*', '')}.`; return; }
+    permissionGranted = true;
+  }
+
+  newSettings.llm.baseUrl = baseInput;
   newSettings.llm.model = byId<HTMLInputElement>('llm_model').value.trim();
   newSettings.llm.jsonMode = byId<HTMLSelectElement>('llm_json').value === 'true';
   newSettings.llm.maxChars = parseInt(byId<HTMLInputElement>('llm_max').value, 10) || 4000;
@@ -45,7 +124,11 @@ async function save() {
   } catch {}
 
   await setSettings(newSettings);
-  byId<HTMLDivElement>('status').textContent = 'Saved.';
+  if (prevPattern && prevPattern !== nextPattern) {
+    await removeOriginPermission(prevPattern);
+  }
+
+  statusEl.textContent = permissionGranted ? 'Saved. Permission granted for your LLM host.' : 'Saved.';
 }
 
 byId<HTMLButtonElement>('save').addEventListener('click', save);
@@ -69,15 +152,21 @@ byId<HTMLInputElement>('import').addEventListener('change', async (ev) => {
 load();
 
 // Runtime actions
-byId<HTMLButtonElement>('saveCurrent').addEventListener('click', () => {
+byId<HTMLButtonElement>('saveCurrent').addEventListener('click', async () => {
   const status = byId<HTMLSpanElement>('runtimeStatus');
   status.textContent = 'Saving…';
-  chrome.permissions.request({ origins: ['<all_urls>'] }, (granted) => {
-    if (!granted) { status.textContent = 'Permission denied for page access.'; return; }
-    chrome.runtime.sendMessage({ type: 'save-current-tab' }, (res) => {
-      if (!res?.ok) { status.textContent = `Error: ${res?.error || 'Failed'}`; return; }
-      status.textContent = `Saved: ${res.item.title || res.item.url}`;
-    });
+  const tab = await getActiveTab();
+  if (!tab?.url) { status.textContent = 'Active tab URL unavailable.'; return; }
+  const tabOriginPattern = originPattern(tab.url);
+  if (!tabOriginPattern) { status.textContent = 'Cannot access this tab. Try a regular http(s) page.'; return; }
+  const hasPermission = await containsOriginPermission(tabOriginPattern);
+  if (!hasPermission) {
+    const granted = await requestOriginPermission(tabOriginPattern);
+    if (!granted) { status.textContent = 'Permission denied for this site.'; return; }
+  }
+  chrome.runtime.sendMessage({ type: 'save-current-tab' }, (res) => {
+    if (!res?.ok) { status.textContent = `Error: ${res?.error || 'Failed'}`; return; }
+    status.textContent = `Saved: ${res.item.title || res.item.url}`;
   });
 });
 

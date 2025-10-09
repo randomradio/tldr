@@ -24,12 +24,11 @@
   ],
   "host_permissions": [
     "https://api.pinboard.in/*",
-    "https://readwise.io/*",
-    "http://localhost:11434/*",
-    "https://api.moonshot.cn/*"
+    "https://readwise.io/*"
   ],
   "optional_host_permissions": [
-    "<all_urls>"
+    "https://*/*",
+    "http://*/*"
   ],
   "options_ui": {
     "page": "options.html",
