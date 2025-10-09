@@ -4,81 +4,190 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>tldr settings</title>
-    <style>
-      body { font: 14px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 20px; max-width: 800px; }
-      label { display:block; margin-top:10px; }
-      input, select, textarea { width: 100%; padding: 6px; margin-top: 4px; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .actions { margin-top: 12px; display:flex; gap:8px; }
-      .secret { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    </style>
+    <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <h2>tldr settings</h2>
-    <p>
-      <a href="https://github.com/randomradio/tldr" target="_blank" rel="noopener noreferrer">Project on GitHub</a>
-    </p>
-    <div class="actions">
-      <button id="saveCurrent">Save & Tag current tab</button>
-      <button id="importTags">Import Pinboard tags</button>
-      <span id="runtimeStatus"></span>
+    <div class="page">
+      <header>
+        <div class="title">
+          <div class="app-icon">
+            <img src="icons/icon128.png" alt="tldr icon" />
+          </div>
+          <div>
+            <h1>tldr Settings</h1>
+            <p class="subtitle">Tune the tagging pipeline, integrations, and exports.</p>
+            <div class="pill">
+              <span id="appVersion">v0.0.0</span>
+              <span>·</span>
+              <a class="link" href="https://github.com/randomradio/tldr" target="_blank" rel="noopener noreferrer">Project on GitHub</a>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Settings tabs">
+        <button class="tab-button active" data-tab="llm">LLM Configuration</button>
+        <button class="tab-button" data-tab="integrations">Integrations</button>
+        <button class="tab-button" data-tab="sync">Sync & Export</button>
+      </nav>
+
+      <div class="panels">
+        <section class="tab-panel active" data-panel="llm">
+          <div class="card">
+            <h2>LLM Settings</h2>
+            <div class="field">
+              <label for="llm_base">Base URL</label>
+              <input id="llm_base" placeholder="http://localhost:11434/v1" />
+              <small>Where the extension sends prompts when tagging new links.</small>
+            </div>
+            <div class="grid-two">
+              <div class="field">
+                <label for="llm_model">Model</label>
+                <input id="llm_model" placeholder="llama3" />
+              </div>
+              <div class="field">
+                <label for="llm_max">Max characters sent</label>
+                <input id="llm_max" type="number" min="0" step="500" value="4000" />
+              </div>
+            </div>
+            <div class="grid-two">
+              <div class="field">
+                <label for="llm_json">JSON mode</label>
+                <select id="llm_json">
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="llm_key">API key (optional)</label>
+                <input id="llm_key" type="password" class="secret" placeholder="sk-..." autocomplete="off" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Tagging Preferences</h2>
+            <div class="grid-two">
+              <div class="field">
+                <label for="tag_limit">Known tag limit</label>
+                <input id="tag_limit" type="number" min="10" step="10" value="200" />
+                <small>Pinboard tags cached locally so autocomplete stays snappy.</small>
+              </div>
+              <div class="field">
+                <label for="dedupe">Dedupe threshold (0-100)</label>
+                <input id="dedupe" type="number" min="0" max="100" value="82" />
+                <small>Higher values make fuzzy duplicates less likely.</small>
+              </div>
+            </div>
+            <div class="field">
+              <label for="privacy">Privacy mode</label>
+              <select id="privacy">
+                <option value="title_only">title_only</option>
+                <option value="title_excerpt">title_excerpt</option>
+                <option value="full_truncated">full_truncated</option>
+              </select>
+              <small>Choose how much page content is sent to your LLM.</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="integrations">
+          <div class="card">
+            <h2>Pinboard</h2>
+            <div class="field">
+              <label for="pin_token">Auth token</label>
+              <input id="pin_token" type="password" class="secret" placeholder="user:XXXXXXXX" autocomplete="off" />
+              <small>Find it at https://pinboard.in/settings/password</small>
+            </div>
+            <div class="grid-two">
+              <div class="field">
+                <label for="pin_shared">Shared</label>
+                <select id="pin_shared">
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="pin_toread">To read</label>
+                <select id="pin_toread">
+                  <option value="false">false</option>
+                  <option value="true">true</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Readwise Reader</h2>
+            <div class="field">
+              <label for="readwise_token">API token</label>
+              <input id="readwise_token" type="password" class="secret" placeholder="rw_token_..." autocomplete="off" />
+              <small>Optional. Enable export to Readwise Reader.</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="sync">
+          <div class="card">
+            <h2>Pinboard Imports</h2>
+            <div class="grid-two">
+              <div class="field">
+                <label for="pin_count">Load recent posts</label>
+                <input id="pin_count" type="number" min="1" max="100" value="50" />
+                <small>How many recent bookmarks to fetch for export.</small>
+              </div>
+            </div>
+            <div class="cta-group">
+              <button id="loadFromPin" class="secondary">Load from Pinboard</button>
+              <button id="importTags">Import Pinboard tags</button>
+            </div>
+            <div class="status" id="syncStatus"></div>
+            <div id="pin_list" class="pin-list"></div>
+          </div>
+
+          <div class="card">
+            <h2>Export Destinations</h2>
+            <div class="checkbox-group">
+              <label class="checkbox-row">
+                <input type="checkbox" id="target_goodlinks" checked />
+                <span>Export to Goodlinks</span>
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" id="target_readwise" />
+                <span>Export to Readwise Reader</span>
+              </label>
+            </div>
+            <div class="cta-group" style="margin-top: 20px;">
+              <button id="exportSelected">Export selected</button>
+              <button id="selectAll" class="secondary">Select all</button>
+              <button id="clearSelection" class="ghost">Clear</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Advanced config</h2>
+            <div class="field">
+              <label for="adv">JSON config</label>
+              <textarea id="adv" rows="8" placeholder="{}"></textarea>
+              <small>Advanced overrides merged into the saved settings object.</small>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="actions-bar">
+        <div class="status" id="runtimeStatus"></div>
+        <div class="cta-group">
+          <button id="saveCurrent" class="secondary">Save &amp; Tag Current Tab</button>
+          <label for="import" class="button ghost">Import settings</label>
+          <input type="file" id="import" accept="application/json" hidden />
+          <button id="export" class="secondary">Export settings</button>
+          <button id="save">Save settings</button>
+        </div>
+      </div>
     </div>
-    <section>
-      <h3>LLM</h3>
-      <label>Base URL <input id="llm_base" placeholder="http://localhost:11434/v1" /></label>
-      <label>Model <input id="llm_model" placeholder="llama3" /></label>
-      <label>API Key (optional) <input id="llm_key" class="secret" placeholder="sk-..." /></label>
-      <label>JSON mode <select id="llm_json"><option value="true">true</option><option value="false">false</option></select></label>
-      <label>Max chars sent <input id="llm_max" type="number" min="0" step="1000" value="4000" /></label>
-    </section>
-    <section>
-      <h3>Pinboard</h3>
-      <label>Auth token <input id="pin_token" class="secret" placeholder="user:XXXXXXXX" /></label>
-      <div class="row">
-        <label>Shared <select id="pin_shared"><option value="true">true</option><option value="false">false</option></select></label>
-        <label>To read <select id="pin_toread"><option value="false">false</option><option value="true">true</option></select></label>
-      </div>
-    </section>
-    <section>
-      <h3>Readwise Reader</h3>
-      <label>API token <input id="readwise_token" class="secret" placeholder="rw_token_..." /></label>
-    </section>
-    <section>
-      <h3>Sync & Export</h3>
-      <div class="actions">
-        <button id="loadFromPin">Load recent from Pinboard</button>
-        <input id="pin_count" type="number" min="1" max="100" value="50" style="width:120px" />
-        <span id="syncStatus"></span>
-      </div>
-      <div class="row" style="grid-template-columns: 1fr 1fr; align-items: center;">
-        <label><input type="checkbox" id="target_goodlinks" checked /> Export to Goodlinks</label>
-        <label><input type="checkbox" id="target_readwise" /> Export to Readwise</label>
-      </div>
-      <div class="actions">
-        <button id="exportSelected">Export selected</button>
-        <button id="selectAll">Select all</button>
-        <button id="clearSelection">Clear</button>
-      </div>
-      <div id="pin_list" style="margin-top:8px"></div>
-    </section>
-    <section>
-      <h3>Tagging</h3>
-      <div class="row">
-        <label>Known tag limit <input id="tag_limit" type="number" min="10" step="10" value="200" /></label>
-        <label>Dedupe threshold (0-100) <input id="dedupe" type="number" min="0" max="100" value="82" /></label>
-      </div>
-      <label>Privacy mode <select id="privacy"><option value="title_only">title_only</option><option value="title_excerpt">title_excerpt</option><option value="full_truncated">full_truncated</option></select></label>
-    </section>
-    <section>
-      <h3>Advanced config</h3>
-      <label>JSON config <textarea id="adv" rows="8" placeholder="{}"></textarea></label>
-      <div class="actions">
-        <button id="save">Save</button>
-        <button id="export">Export</button>
-        <input type="file" id="import" />
-      </div>
-      <div id="status"></div>
-    </section>
+
     <script type="module" src="ui/options.js"></script>
   </body>
-  </html>
+</html>

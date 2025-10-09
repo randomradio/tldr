@@ -92,24 +92,61 @@ byId<HTMLButtonElement>('importTags').addEventListener('click', () => {
 
 // Pinboard listing + export
 type PinListItem = { url: string; title: string; tags: string[] };
+const PIN_STORAGE_KEY = 'tldr.pinboard.items';
 let pinItems: PinListItem[] = [];
+
+function persistPinItems() {
+  try {
+    if (pinItems.length) {
+      chrome.storage.local.set({ [PIN_STORAGE_KEY]: pinItems });
+    } else {
+      chrome.storage.local.remove(PIN_STORAGE_KEY);
+    }
+  } catch (err) {
+    console.warn('Could not persist Pinboard items', err);
+  }
+}
 
 function renderPinList() {
   const el = byId<HTMLDivElement>('pin_list');
   if (!el) return;
-  if (!pinItems.length) { el.innerHTML = '<em>No items loaded.</em>'; return; }
+  if (!pinItems.length) {
+    el.innerHTML = '<div class="status">No items loaded yet.</div>';
+    return;
+  }
   const rows = pinItems.map((it, i) => {
     const tags = it.tags.join(', ');
-    const safeTitle = (it.title || it.url).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    return `<div style="display:grid; grid-template-columns: 24px 1fr; gap:8px; padding:6px 0; border-bottom:1px solid #eee;">
-      <input type="checkbox" data-idx="${i}" class="pin_sel" />
+    const safeTitle = (it.title || it.url)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;');
+    const safeUrl = it.url.replace(/"/g, '&quot;');
+    return `<div class="pin-item">
+      <div class="checkbox-row">
+        <input type="checkbox" data-idx="${i}" class="pin_sel" />
+      </div>
       <div>
-        <div><a href="${it.url}" target="_blank" rel="noopener noreferrer">${safeTitle}</a></div>
-        <div style="color:#666; font-size:12px;">${tags}</div>
+        <div class="pin-item-title"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeTitle}</a></div>
+        <div class="pin-item-tags">${tags}</div>
       </div>
     </div>`;
   }).join('');
   el.innerHTML = rows;
+}
+
+renderPinList();
+
+try {
+  chrome.storage.local.get(PIN_STORAGE_KEY, (res) => {
+    const stored = res?.[PIN_STORAGE_KEY];
+    if (Array.isArray(stored) && stored.length) {
+      pinItems = stored as PinListItem[];
+      renderPinList();
+      const status = byId<HTMLSpanElement>('syncStatus');
+      if (status) status.textContent = `Loaded ${pinItems.length} cached item${pinItems.length === 1 ? '' : 's'}.`;
+    }
+  });
+} catch (err) {
+  console.warn('Could not hydrate Pinboard items from storage', err);
 }
 
 byId<HTMLButtonElement>('loadFromPin')?.addEventListener('click', () => {
@@ -120,6 +157,7 @@ byId<HTMLButtonElement>('loadFromPin')?.addEventListener('click', () => {
     if (!res?.ok) { status.textContent = `Error: ${res?.error || 'Failed'}`; return; }
     pinItems = res.items || [];
     renderPinList();
+    persistPinItems();
     status.textContent = `Loaded ${pinItems.length}`;
   });
 });
@@ -156,3 +194,34 @@ byId<HTMLButtonElement>('exportSelected')?.addEventListener('click', () => {
     status.textContent = `Exported ${parts.join(', ')}`;
   });
 });
+
+try {
+  const versionEl = document.getElementById('appVersion');
+  if (versionEl) versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+} catch {
+  // ignore
+}
+
+const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab-button'));
+const tabPanels = Array.from(document.querySelectorAll<HTMLElement>('.tab-panel'));
+tabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.tab;
+    if (!target) return;
+    tabButtons.forEach((b) => b.classList.toggle('active', b === btn));
+    tabPanels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === target));
+    try { chrome.storage.local.set({ 'tldr.options.activeTab': target }); } catch {}
+  });
+});
+
+try {
+  chrome.storage.local.get('tldr.options.activeTab', (res) => {
+    const target = res?.['tldr.options.activeTab'];
+    if (typeof target === 'string') {
+      const btn = tabButtons.find((b) => b.dataset.tab === target);
+      if (btn) btn.click();
+    }
+  });
+} catch (err) {
+  console.warn('Could not restore active tab', err);
+}
