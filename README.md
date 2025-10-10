@@ -1,52 +1,38 @@
-TL;DR Browser Extension (MV3)
+**tldr – A Thinking Partner for Everything You Save**
+- We squirrel away links, highlights, and threads because they might be “useful someday.” Then real life hits and the backlog fossilises. I built tldr to be the missing layer between capture and insight—a browser companion that not only grabs the page, but helps you organise it, reflect on it, and create something new from it.
 
-Goal: Save links, extract page content, generate tags with an OpenAI‑compatible LLM, and sync to Pinboard. No backend.
+### The Problem We’re Solving
+- Read-it-later services (Pinboard, Readwise, GoodLinks) are excellent at hoarding content, not so great at helping you *think* about it. They expect you to remember what you saved, tag it carefully, and somehow make time to revisit it all. Most of us never do.
+- Obsidian-style personal knowledge bases are powerful but demand discipline: manually linking notes, managing tags, curating vaults. If you’re already drowning in unread articles, you don’t have spare cycles to tidy the library.
+- Result: a pile of “important” stuff with no structure, no ritual for review, and no easy way to move from consumption to creation.
 
-Structure
-- static/: manifest, HTML assets, placeholder readability.js
-- src/background/: service worker, pipeline, LLM, Pinboard, tabs helpers
-- src/ui/: popup and options scripts
-- src/common/: types and storage helpers
+### The Vision
+- **Collect effortlessly.** A single click capture that extracts clean text, stores it locally, and syncs with the services you already use. Import your existing Pinboard or Readwise collections so the system starts useful on day one.
+- **Organise with smart tags, not chores.** The extension sends the content to your favourite LLM (Ollama on localhost, a cloud model, anything OpenAI-compatible) to suggest canonical tags, relate items, and surface themes. You stay in control—curate synonyms, pin focus topics, merge duplicates—but the heavy lifting is automated.
+- **Reflect through scheduled reports.** Imagine a Friday digest that says, “You saved six pieces on evaluation frameworks and three on climate tech. Here are the summaries, here’s what changed since last month, here’s a question to explore next.” tldr wants to build that ritual for you.
+- **Inspire new ideas.** Beyond summaries, the assistant can remix your saved content: propose blog outlines, connect disparate articles, prompt you with “What if…” questions—anything that nudges you to create rather than collect.
 
-Build
-- Requires Node 18+.
-- Install deps: npm install
-- Build: npm run build (or npm run watch)
-- Load unpacked: point Chrome to the dist/ directory
+### Feature List
+- Capture the current tab and extract readable content with the built-in readability fallback.
+- Auto-tag new items by calling an OpenAI-compatible `chat/completions` endpoint that you configure at runtime—no hard-coded hosts, no forced vendors.
+- Sync saved items to Pinboard (including tag import/export), with GoodLinks and Readwise exports on deck.
+- Store everything locally; no backend service required.
+- Navigate a full options dashboard for configuring LLM models, privacy modes, tag behaviour, and integrations.
 
-Configure
-- Open the extension’s Options page.
-- LLM: set base URL (e.g., http://localhost:11434/v1 for Ollama), model, optional API key. Enable JSON mode if supported.
-- Pinboard: paste auth token (user:token), set defaults for shared/to read.
-- Privacy: choose how much content to send to LLM (title only, title+excerpt, or truncated full text).
+### Getting Started
+- Install Node 18+.
+- `npm install` to pull dependencies.
+- `npm run build` for a one-off bundle (or `npm run watch` while hacking).
+- Load the unpacked extension from the freshly created `dist/` directory in Chrome.
+- Hop into the Options page to plug in your LLM base URL, model name, and optional API key; paste your Pinboard token; choose how much content is shared with the LLM.
 
-Readability (optional, recommended)
-- The extractor tries to use window.Readability if available; otherwise it falls back to body.innerText.
-- To enable high‑quality extraction, replace static/readability.js with Mozilla Readability’s UMD bundle and rebuild.
+### Packaging & Release Ritual
+- Bump version in `package.json` (the build script mirrors it into `dist/manifest.json` automatically).
+- `npm run build` then `npm run package` (see `scripts/package.mjs`) to produce `tldr-v<version>.zip`.
+- Upload to the Chrome Web Store with updated screenshots and data-collection notes.
+- Tag the release (`git tag v<version> && git push origin --tags`), draft GitHub notes, and attach the zip for sideloaders.
 
-Security
-- API keys are stored in chrome.storage.local. This is suitable for personal use; avoid publishing the CRX with secrets.
-
-Next Steps
-- Wire Pinboard tag import for known tags (GET https://api.pinboard.in/v1/tags/get).
-- Add a tag editor in the popup before syncing.
-- Add optional_host_permissions request for your chosen LLM host if it differs from defaults.
-
-# tldr
-
-
-Release
-------
-
-### Chrome Web Store
-1. Update the version in both `package.json` and `static/manifest.json`, then run `pnpm run build`.
-2. Run `pnpm run package` to create `tldr-v<version>.zip`.
-3. Sign in to the Chrome Web Store dashboard, start a new item, and upload the zip.
-4. Provide the required listing assets: the icons in `static/icons` cover the 16–512px sizes; add screenshots before submitting.
-5. Fill in privacy/data collection disclosures and submit for review.
-
-### GitHub Release
-1. Commit changes and tag the release (`git tag v<version> && git push origin v<version>`).
-2. Run `pnpm run build` followed by `pnpm run package` to refresh `tldr-v<version>.zip`.
-3. Draft a release on GitHub, select the tag, list highlights, and attach the zip so users can sideload.
-4. Publish the release when you're ready.
+### Contributing & Feedback
+- I’m dogfooding the tool to tame my own reading queue, but the north star is a community-sourced thinking partner. Open issues for features you crave, integrations you rely on, or moments where the flow breaks.
+- Want to explore the “report” or “idea lab” concepts early? Reach out—I’d love to collaborate on prototypes.
+- The best compliment is a story: “tldr helped me turn three unrelated articles into a pitch deck.” If that ever happens, please share. That’s the energy powering this project.
