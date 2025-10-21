@@ -1,6 +1,8 @@
-import { getSettings, setSettings, setSecret } from '@common/storage';
+import { getSecret, getSettings, setSettings, setSecret } from '@common/storage';
 
 function byId<T extends HTMLElement>(id: string) { return document.getElementById(id) as T; }
+
+const SECRET_PLACEHOLDER = '••••••••';
 
 function originPattern(url: string): string | null {
   try {
@@ -75,6 +77,11 @@ async function load() {
   byId<HTMLInputElement>('dedupe').value = String(s.tagging.dedupeThreshold);
   byId<HTMLSelectElement>('privacy').value = s.privacy.mode as any;
   byId<HTMLTextAreaElement>('adv').value = JSON.stringify(s.advanced || {}, null, 2);
+  await Promise.all([
+    hydrateSecretField('llm_key', s.llm.apiKeyRef),
+    hydrateSecretField('pin_token', s.pinboard.authTokenRef),
+    hydrateSecretField('readwise_token', s.readwise?.apiTokenRef)
+  ]);
 }
 
 async function save() {
@@ -101,20 +108,9 @@ async function save() {
   newSettings.llm.model = byId<HTMLInputElement>('llm_model').value.trim();
   newSettings.llm.jsonMode = byId<HTMLSelectElement>('llm_json').value === 'true';
   newSettings.llm.maxChars = parseInt(byId<HTMLInputElement>('llm_max').value, 10) || 4000;
-  const llmKey = byId<HTMLInputElement>('llm_key').value.trim();
-  if (llmKey) { newSettings.llm.apiKeyRef = 'llm_api_key'; await setSecret('llm_api_key', llmKey); }
 
-  const pin = byId<HTMLInputElement>('pin_token').value.trim();
-  if (pin) { newSettings.pinboard.authTokenRef = 'pin_token'; await setSecret('pin_token', pin); }
   newSettings.pinboard.shared = byId<HTMLSelectElement>('pin_shared').value === 'true';
   newSettings.pinboard.toread = byId<HTMLSelectElement>('pin_toread').value === 'true';
-
-  const rw = byId<HTMLInputElement>('readwise_token')?.value?.trim();
-  if (rw) {
-    if (!newSettings.readwise) newSettings.readwise = {} as any;
-    newSettings.readwise.apiTokenRef = 'readwise_token';
-    await setSecret('readwise_token', rw);
-  }
 
   newSettings.tagging.knownTagLimit = parseInt(byId<HTMLInputElement>('tag_limit').value, 10) || 200;
   newSettings.tagging.dedupeThreshold = parseInt(byId<HTMLInputElement>('dedupe').value, 10) || 82;
@@ -122,6 +118,37 @@ async function save() {
   try {
     newSettings.advanced = JSON.parse(byId<HTMLTextAreaElement>('adv').value || '{}');
   } catch {}
+
+  await persistSecretField({
+    inputId: 'llm_key',
+    storageKey: 'llm_api_key',
+    currentRef: newSettings.llm.apiKeyRef,
+    assignRef: (ref) => {
+      if (ref) newSettings.llm.apiKeyRef = ref;
+      else delete newSettings.llm.apiKeyRef;
+    }
+  });
+
+  await persistSecretField({
+    inputId: 'pin_token',
+    storageKey: 'pin_token',
+    currentRef: newSettings.pinboard.authTokenRef,
+    assignRef: (ref) => {
+      if (ref) newSettings.pinboard.authTokenRef = ref;
+      else delete newSettings.pinboard.authTokenRef;
+    }
+  });
+
+  await persistSecretField({
+    inputId: 'readwise_token',
+    storageKey: 'readwise_token',
+    currentRef: newSettings.readwise?.apiTokenRef,
+    assignRef: (ref) => {
+      if (!newSettings.readwise) newSettings.readwise = {} as any;
+      if (ref) newSettings.readwise.apiTokenRef = ref;
+      else if (newSettings.readwise) delete newSettings.readwise.apiTokenRef;
+    }
+  });
 
   await setSettings(newSettings);
   if (prevPattern && prevPattern !== nextPattern) {
@@ -176,6 +203,88 @@ byId<HTMLButtonElement>('importTags').addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'import-pinboard-tags' }, (res) => {
     if (!res?.ok) { status.textContent = `Import failed: ${res?.error || 'Unknown'}`; return; }
     status.textContent = `Imported ${res.count} tags`;
+  });
+});
+
+type SecretField = {
+  inputId: string;
+  storageKey: string;
+  currentRef?: string;
+  assignRef: (ref?: string) => void;
+};
+
+async function persistSecretField({ inputId, storageKey, currentRef, assignRef }: SecretField): Promise<void> {
+  const input = byId<HTMLInputElement>(inputId);
+  const masked = input.dataset.secretMasked === 'true';
+  const raw = input.value.trim();
+
+  if (masked && raw === SECRET_PLACEHOLDER) {
+    if (currentRef) assignRef(currentRef);
+    applySecretPresence(input, true);
+    return;
+  }
+
+  if (raw) {
+    await setSecret(storageKey, raw);
+    assignRef(storageKey);
+    applySecretPresence(input, true);
+  } else {
+    await setSecret(storageKey, '');
+    assignRef(undefined);
+    applySecretPresence(input, false);
+  }
+}
+
+async function hydrateSecretField(inputId: string, ref?: string): Promise<void> {
+  const input = byId<HTMLInputElement>(inputId);
+  rememberPlaceholder(input);
+  if (!ref) {
+    applySecretPresence(input, false);
+    return;
+  }
+  const value = await getSecret(ref);
+  applySecretPresence(input, Boolean(value));
+}
+
+function rememberPlaceholder(input: HTMLInputElement): void {
+  if (!input.dataset.originalPlaceholder) {
+    input.dataset.originalPlaceholder = input.placeholder || '';
+  }
+}
+
+function applySecretPresence(input: HTMLInputElement, hasSecret: boolean): void {
+  if (hasSecret) {
+    input.value = SECRET_PLACEHOLDER;
+    input.dataset.secretMasked = 'true';
+    input.dataset.secretState = 'present';
+    input.placeholder = 'Saved secret';
+  } else {
+    input.value = '';
+    input.dataset.secretMasked = 'false';
+    input.dataset.secretState = 'missing';
+    input.placeholder = input.dataset.originalPlaceholder || '';
+  }
+}
+
+['llm_key', 'pin_token', 'readwise_token'].forEach((id) => {
+  const input = byId<HTMLInputElement>(id);
+  rememberPlaceholder(input);
+  input.addEventListener('focus', () => {
+    if (input.dataset.secretMasked === 'true') {
+      // Highlight placeholder so typing replaces it immediately.
+      input.select();
+    }
+  });
+  input.addEventListener('input', () => {
+    if (input.dataset.secretMasked === 'true' && input.value !== SECRET_PLACEHOLDER) {
+      input.dataset.secretMasked = 'false';
+      input.dataset.secretState = input.value.trim() ? 'pending' : 'missing';
+    }
+  });
+  input.addEventListener('blur', () => {
+    if (!input.value.trim() && input.dataset.secretState === 'pending') {
+      input.dataset.secretState = 'missing';
+    }
   });
 });
 
