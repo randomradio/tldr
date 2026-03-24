@@ -2,6 +2,27 @@ import { getSecret, getSettings } from '@common/storage';
 
 export interface LlmTagResponse { tags: { name: string; confidence?: number }[] }
 
+function chatCompletionsUrl(baseUrl: string): string {
+  const normalized = baseUrl.trim().replace(/\/+$/, '');
+  if (!normalized) throw new Error('LLM base URL is empty');
+  if (/\/chat\/completions$/i.test(normalized)) return normalized;
+  return `${normalized}/chat/completions`;
+}
+
+function extractErrorDetail(raw: string): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { message?: string };
+      detail?: string;
+      message?: string;
+    };
+    return parsed?.error?.message || parsed?.detail || parsed?.message;
+  } catch {
+    return raw.trim();
+  }
+}
+
 export async function generateTags(ctx: { title: string; url: string; domain: string; excerpt?: string; knownTags: string[] }): Promise<string[]> {
   const settings = await getSettings();
   const key = settings.llm.apiKeyRef ? await getSecret(settings.llm.apiKeyRef) : undefined;
@@ -26,17 +47,40 @@ export async function generateTags(ctx: { title: string; url: string; domain: st
   };
   if (settings.llm.jsonMode) (body as any).response_format = { type: 'json_object' };
 
-  const res = await fetch(`${settings.llm.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(key ? { Authorization: `Bearer ${key}` } : {})
-    },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`LLM error ${res.status}`);
-  const data = await res.json();
-  const text = data?.choices?.[0]?.message?.content || '';
+  const url = chatCompletionsUrl(settings.llm.baseUrl);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(key ? { Authorization: `Bearer ${key}` } : {})
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`LLM request failed: ${message}. Verify the LLM host permission and network access.`);
+  }
+  if (!res.ok) {
+    const detail = extractErrorDetail(await res.text());
+    const msg = detail ? `: ${detail}` : '';
+    throw new Error(`LLM error ${res.status}${msg}`);
+  }
+
+  let data: any;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error('LLM returned a non-JSON response');
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('')
+      : '';
   let parsed: LlmTagResponse | null = null;
   try {
     parsed = JSON.parse(text);
