@@ -1,13 +1,7 @@
 import { getSecret, getSettings } from '@common/storage';
+import { chatCompletionsUrl } from '@common/preview';
 
 export interface LlmTagResponse { tags: { name: string; confidence?: number }[] }
-
-function chatCompletionsUrl(baseUrl: string): string {
-  const normalized = baseUrl.trim().replace(/\/+$/, '');
-  if (!normalized) throw new Error('LLM base URL is empty');
-  if (/\/chat\/completions$/i.test(normalized)) return normalized;
-  return `${normalized}/chat/completions`;
-}
 
 function extractErrorDetail(raw: string): string | undefined {
   if (!raw) return undefined;

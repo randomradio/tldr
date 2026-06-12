@@ -1,4 +1,5 @@
 import { getSettings, getTags, upsertItem, updateTags } from '@common/storage';
+import { selectExcerpt } from '@common/preview';
 import type { Item } from '@common/types';
 import { generateTags } from './llm';
 import { canonicalizeTags, slugify } from './tags';
@@ -13,10 +14,7 @@ export async function tagAndMaybeSync(input: { url: string; title: string; domai
   const knownMap = await getTags();
   const known = Object.keys(knownMap).sort((a, b) => (knownMap[b]?.count || 0) - (knownMap[a]?.count || 0)).slice(0, settings.tagging.knownTagLimit);
 
-  let excerpt: string | undefined;
-  if (settings.privacy.mode === 'title_only') excerpt = undefined;
-  else if (settings.privacy.mode === 'title_excerpt') excerpt = input.text?.slice(0, Math.min(800, settings.llm.maxChars));
-  else excerpt = input.text?.slice(0, settings.llm.maxChars);
+  const excerpt = selectExcerpt(input.text, settings.privacy.mode, settings.llm.maxChars);
 
   const llmTags = await generateTags({ title: input.title, url: input.url, domain: input.domain, excerpt, knownTags: known });
   const tags = canonicalizeTags(llmTags, known, settings).map(slugify);
@@ -45,4 +43,3 @@ export async function tagAndMaybeSync(input: { url: string; title: string; domai
 
   return item;
 }
-

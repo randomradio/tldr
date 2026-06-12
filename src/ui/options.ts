@@ -1,8 +1,18 @@
 import { getSecret, getSettings, setSettings, setSecret } from '@common/storage';
+import {
+  buildDestinationPreviews,
+  privacyModeDescription,
+  privacyModeLabel,
+  type DataPreview,
+  type DestinationPreview,
+  type ExportTargets
+} from '@common/preview';
+import type { PrivacyMode, Settings } from '@common/types';
 
 function byId<T extends HTMLElement>(id: string) { return document.getElementById(id) as T; }
 
 const SECRET_PLACEHOLDER = '••••••••';
+let loadedSettings: Settings | undefined;
 
 function originPattern(url: string): string | null {
   try {
@@ -65,8 +75,172 @@ function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
   });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function inputNumber(id: string, fallback: number): number {
+  const value = parseInt(byId<HTMLInputElement>(id).value, 10);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function isSecretConfigured(inputId: string): boolean {
+  const input = byId<HTMLInputElement>(inputId);
+  if (input.dataset.secretState === 'present') return true;
+  if (input.dataset.secretMasked === 'true' && input.value === SECRET_PLACEHOLDER) return true;
+  return false;
+}
+
+function getExportTargets(): ExportTargets {
+  return {
+    goodlinks: byId<HTMLInputElement>('target_goodlinks')?.checked || false,
+    readwise: byId<HTMLInputElement>('target_readwise')?.checked || false
+  };
+}
+
+function draftSettingsFromForm(base: Settings): Settings {
+  return {
+    ...base,
+    llm: {
+      ...base.llm,
+      baseUrl: byId<HTMLInputElement>('llm_base').value.trim(),
+      model: byId<HTMLInputElement>('llm_model').value.trim(),
+      jsonMode: byId<HTMLSelectElement>('llm_json').value === 'true',
+      maxChars: inputNumber('llm_max', base.llm.maxChars)
+    },
+    pinboard: {
+      ...base.pinboard,
+      shared: byId<HTMLSelectElement>('pin_shared').value === 'true',
+      toread: byId<HTMLSelectElement>('pin_toread').value === 'true'
+    },
+    tagging: {
+      ...base.tagging,
+      knownTagLimit: inputNumber('tag_limit', base.tagging.knownTagLimit),
+      dedupeThreshold: inputNumber('dedupe', base.tagging.dedupeThreshold)
+    },
+    privacy: {
+      ...base.privacy,
+      mode: byId<HTMLSelectElement>('privacy').value as PrivacyMode
+    }
+  };
+}
+
+async function getDraftSettings(): Promise<Settings> {
+  return draftSettingsFromForm(loadedSettings || await getSettings());
+}
+
+function getPreviewDraft() {
+  const base = loadedSettings;
+  const fallbackMax = base?.llm.maxChars ?? 4000;
+  return {
+    llmBaseUrl: byId<HTMLInputElement>('llm_base').value.trim(),
+    llmModel: byId<HTMLInputElement>('llm_model').value.trim(),
+    llmMaxChars: inputNumber('llm_max', fallbackMax),
+    privacyMode: byId<HTMLSelectElement>('privacy').value as PrivacyMode,
+    pinboardConfigured: isSecretConfigured('pin_token'),
+    readwiseConfigured: isSecretConfigured('readwise_token'),
+    exportTargets: getExportTargets()
+  };
+}
+
+function destinationStatusLabel(status: DestinationPreview['status']): string {
+  switch (status) {
+    case 'active':
+      return 'Active';
+    case 'not_configured':
+      return 'Not configured';
+    case 'disabled':
+      return 'Disabled';
+  }
+}
+
+function renderDestination(destination: DestinationPreview): string {
+  const receives = destination.receives.length
+    ? destination.receives.map((item) => `<span class="mini-pill">${escapeHtml(item)}</span>`).join('')
+    : '<span class="mini-pill">No data sent</span>';
+
+  return `<div class="destination">
+    <div class="destination-head">
+      <div class="destination-title">${escapeHtml(destination.label)}</div>
+      <div class="destination-status ${destination.status}">${destinationStatusLabel(destination.status)}</div>
+    </div>
+    <div class="destination-copy">${escapeHtml(destination.statusText)}</div>
+    <div class="destination-receives">${receives}</div>
+  </div>`;
+}
+
+async function renderDataPreview(): Promise<void> {
+  const settings = await getDraftSettings();
+  const mode = settings.privacy.mode;
+  byId<HTMLDivElement>('privacy_summary').innerHTML = `<strong>${escapeHtml(privacyModeLabel(mode))}</strong>: ${escapeHtml(privacyModeDescription(mode))}`;
+
+  const destinations = buildDestinationPreviews(settings, {
+    pinboardConfigured: isSecretConfigured('pin_token'),
+    readwiseConfigured: isSecretConfigured('readwise_token'),
+    exportTargets: getExportTargets()
+  });
+  byId<HTMLDivElement>('destination_preview').innerHTML = destinations.map(renderDestination).join('');
+}
+
+function queueDataPreviewRender(): void {
+  renderDataPreview().catch((err) => console.warn('Could not render data preview', err));
+}
+
+function renderCurrentPreview(preview?: DataPreview, message?: string): void {
+  const el = byId<HTMLDivElement>('current_preview');
+  if (!preview) {
+    el.classList.add('empty');
+    el.textContent = message || 'Preview the current tab to inspect field presence and character counts. Excerpt text stays hidden until expanded.';
+    return;
+  }
+
+  const fieldRows = preview.llm.fields.map((field) => {
+    const count = typeof field.charCount === 'number' ? `${field.charCount} chars` : 'not present';
+    if (field.expandable) {
+      return `<div class="preview-field">
+        <div class="preview-field-head">
+          <div class="preview-field-label">${escapeHtml(field.label)}</div>
+          <div class="preview-count">${escapeHtml(count)}</div>
+        </div>
+        <button type="button" class="ghost preview-toggle" data-preview-toggle>Show text</button>
+        <pre class="preview-excerpt" hidden>${escapeHtml(field.value || '')}</pre>
+      </div>`;
+    }
+
+    return `<div class="preview-field">
+      <div class="preview-field-head">
+        <div class="preview-field-label">${escapeHtml(field.label)}</div>
+        <div class="preview-count">${escapeHtml(count)}</div>
+      </div>
+      <div class="preview-value">${escapeHtml(field.value || 'Not present')}</div>
+    </div>`;
+  }).join('');
+
+  el.classList.remove('empty');
+  el.innerHTML = `<div class="preview-meta">
+    ${preview.llm.endpoint ? `LLM endpoint: ${escapeHtml(preview.llm.endpoint)}` : 'No LLM endpoint configured.'}<br />
+    Does not send: ${preview.llm.doesNotSend.map(escapeHtml).join(', ')}
+  </div>
+  <div class="preview-fields">${fieldRows}</div>`;
+
+  el.querySelectorAll<HTMLButtonElement>('[data-preview-toggle]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const excerpt = button.parentElement?.querySelector<HTMLPreElement>('.preview-excerpt');
+      if (!excerpt) return;
+      const hidden = excerpt.hasAttribute('hidden');
+      excerpt.toggleAttribute('hidden', !hidden);
+      button.textContent = hidden ? 'Hide text' : 'Show text';
+    });
+  });
+}
+
 async function load() {
   const s = await getSettings();
+  loadedSettings = s;
   byId<HTMLInputElement>('llm_base').value = s.llm.baseUrl;
   byId<HTMLInputElement>('llm_model').value = s.llm.model;
   byId<HTMLSelectElement>('llm_json').value = String(s.llm.jsonMode) as any;
@@ -82,6 +256,7 @@ async function load() {
     hydrateSecretField('pin_token', s.pinboard.authTokenRef),
     hydrateSecretField('readwise_token', s.readwise?.apiTokenRef)
   ]);
+  queueDataPreviewRender();
 }
 
 async function save() {
@@ -144,18 +319,21 @@ async function save() {
     storageKey: 'readwise_token',
     currentRef: newSettings.readwise?.apiTokenRef,
     assignRef: (ref) => {
-      if (!newSettings.readwise) newSettings.readwise = {} as any;
-      if (ref) newSettings.readwise.apiTokenRef = ref;
-      else if (newSettings.readwise) delete newSettings.readwise.apiTokenRef;
+      if (!newSettings.readwise) newSettings.readwise = {};
+      const readwise = newSettings.readwise;
+      if (ref) readwise.apiTokenRef = ref;
+      else delete readwise.apiTokenRef;
     }
   });
 
   await setSettings(newSettings);
+  loadedSettings = newSettings;
   if (prevPattern && prevPattern !== nextPattern) {
     await removeOriginPermission(prevPattern);
   }
 
   statusEl.textContent = permissionGranted ? 'Saved. Permission granted for your LLM host.' : 'Saved.';
+  queueDataPreviewRender();
 }
 
 byId<HTMLButtonElement>('save').addEventListener('click', save);
@@ -179,6 +357,35 @@ byId<HTMLInputElement>('import').addEventListener('change', async (ev) => {
 load();
 
 // Runtime actions
+byId<HTMLButtonElement>('previewCurrent').addEventListener('click', async () => {
+  const status = byId<HTMLSpanElement>('runtimeStatus');
+  status.textContent = 'Previewing…';
+  renderCurrentPreview(undefined, 'Loading current tab preview…');
+  const tab = await getActiveTab();
+  if (!tab?.url) { status.textContent = 'Active tab URL unavailable.'; renderCurrentPreview(undefined); return; }
+  const tabOriginPattern = originPattern(tab.url);
+  if (!tabOriginPattern) { status.textContent = 'Cannot access this tab. Try a regular http(s) page.'; renderCurrentPreview(undefined); return; }
+  const hasPermission = await containsOriginPermission(tabOriginPattern);
+  if (!hasPermission) {
+    const granted = await requestOriginPermission(tabOriginPattern);
+    if (!granted) { status.textContent = 'Permission denied for this site.'; renderCurrentPreview(undefined); return; }
+  }
+  chrome.runtime.sendMessage({ type: 'preview-current-tab', preview: getPreviewDraft() }, (res) => {
+    if (chrome.runtime.lastError) {
+      status.textContent = `Preview failed: ${chrome.runtime.lastError.message || 'Unknown'}`;
+      renderCurrentPreview(undefined);
+      return;
+    }
+    if (!res?.ok) {
+      status.textContent = `Preview failed: ${res?.error || 'Unknown'}`;
+      renderCurrentPreview(undefined);
+      return;
+    }
+    renderCurrentPreview(res.preview);
+    status.textContent = 'Preview ready.';
+  });
+});
+
 byId<HTMLButtonElement>('saveCurrent').addEventListener('click', async () => {
   const status = byId<HTMLSpanElement>('runtimeStatus');
   status.textContent = 'Saving…';
@@ -233,6 +440,7 @@ async function persistSecretField({ inputId, storageKey, currentRef, assignRef }
     assignRef(undefined);
     applySecretPresence(input, false);
   }
+  queueDataPreviewRender();
 }
 
 async function hydrateSecretField(inputId: string, ref?: string): Promise<void> {
@@ -280,12 +488,32 @@ function applySecretPresence(input: HTMLInputElement, hasSecret: boolean): void 
       input.dataset.secretMasked = 'false';
       input.dataset.secretState = input.value.trim() ? 'pending' : 'missing';
     }
+    queueDataPreviewRender();
   });
   input.addEventListener('blur', () => {
     if (!input.value.trim() && input.dataset.secretState === 'pending') {
       input.dataset.secretState = 'missing';
     }
+    queueDataPreviewRender();
   });
+});
+
+[
+  'llm_base',
+  'llm_model',
+  'llm_json',
+  'llm_max',
+  'pin_shared',
+  'pin_toread',
+  'tag_limit',
+  'dedupe',
+  'privacy',
+  'target_goodlinks',
+  'target_readwise'
+].forEach((id) => {
+  const el = document.getElementById(id);
+  el?.addEventListener('input', queueDataPreviewRender);
+  el?.addEventListener('change', queueDataPreviewRender);
 });
 
 // Pinboard listing + export

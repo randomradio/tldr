@@ -89,6 +89,33 @@
               <small>Choose how much page content is sent to your LLM.</small>
             </div>
           </div>
+
+          <div class="card">
+            <h2>Data Preview</h2>
+            <p class="card-copy">tldr has no hosted backend. Data leaves Chrome only when the configured LLM, Pinboard, Readwise, or GoodLinks flow runs.</p>
+            <div class="preview-grid">
+              <div>
+                <h3>Stored locally</h3>
+                <ul class="data-list">
+                  <li>Saved item title, URL, domain, excerpt, tags, and sync status in Chrome local storage.</li>
+                  <li>API keys and integration tokens in Chrome local storage, shown here only as configured or missing.</li>
+                </ul>
+              </div>
+              <div>
+                <h3>Synced settings</h3>
+                <ul class="data-list">
+                  <li>LLM host, model, privacy mode, tag preferences, and integration flags in Chrome sync storage.</li>
+                  <li>No API key, Pinboard token, or Readwise token is sent to the LLM payload.</li>
+                </ul>
+              </div>
+            </div>
+            <div id="privacy_summary" class="preview-callout"></div>
+            <div class="preview-note">Remote API calls use your configured endpoints. The extension does not load remotely hosted executable code.</div>
+            <h3>Destinations</h3>
+            <div id="destination_preview" class="destination-list"></div>
+            <h3>Current tab LLM payload</h3>
+            <div id="current_preview" class="current-preview empty">Preview the current tab to inspect field presence and character counts. Excerpt text stays hidden until expanded.</div>
+          </div>
         </section>
 
         <section class="tab-panel" data-panel="integrations">
@@ -179,6 +206,7 @@
       <div class="actions-bar">
         <div class="status" id="runtimeStatus"></div>
         <div class="cta-group">
+          <button id="previewCurrent" class="secondary">Preview Current Tab</button>
           <button id="saveCurrent" class="secondary">Save &amp; Tag Current Tab</button>
           <label for="import" class="button ghost">Import settings</label>
           <input type="file" id="import" accept="application/json" hidden />

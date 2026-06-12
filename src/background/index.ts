@@ -1,7 +1,72 @@
+import { getSettings, getTags } from '@common/storage';
+import { buildDataPreview, type DestinationState, type ExportTargets } from '@common/preview';
+import type { PrivacyMode, Settings } from '@common/types';
 import { extractFromActiveTab } from './tabs';
 import { tagAndMaybeSync } from './pipeline';
 import { importTagsFromPinboard, listRecentFromPinboard } from './pinboard';
 import { exportToGoodlinks, exportToReadwise } from './exporters';
+
+type PreviewDraft = {
+  llmBaseUrl?: string;
+  llmModel?: string;
+  llmMaxChars?: number;
+  privacyMode?: PrivacyMode;
+  pinboardConfigured?: boolean;
+  readwiseConfigured?: boolean;
+  exportTargets?: ExportTargets;
+};
+
+function settingsWithPreviewDraft(settings: Settings, draft?: PreviewDraft): Settings {
+  if (!draft) return settings;
+  return {
+    ...settings,
+    llm: {
+      ...settings.llm,
+      baseUrl: draft.llmBaseUrl ?? settings.llm.baseUrl,
+      model: draft.llmModel ?? settings.llm.model,
+      maxChars: Number.isFinite(draft.llmMaxChars) ? Number(draft.llmMaxChars) : settings.llm.maxChars
+    },
+    privacy: {
+      ...settings.privacy,
+      mode: draft.privacyMode ?? settings.privacy.mode
+    }
+  };
+}
+
+function knownTagNames(map: Awaited<ReturnType<typeof getTags>>, limit: number): string[] {
+  return Object.keys(map)
+    .sort((a, b) => (map[b]?.count || 0) - (map[a]?.count || 0))
+    .slice(0, limit);
+}
+
+async function previewCurrentTab(draft?: PreviewDraft) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error('No active tab');
+
+  const [data, settings, knownMap] = await Promise.all([
+    extractFromActiveTab(tab.id),
+    getSettings(),
+    getTags()
+  ]);
+  const previewSettings = settingsWithPreviewDraft(settings, draft);
+  const state: DestinationState = {
+    pinboardConfigured: draft?.pinboardConfigured ?? Boolean(settings.pinboard.authTokenRef),
+    readwiseConfigured: draft?.readwiseConfigured ?? Boolean(settings.readwise?.apiTokenRef),
+    exportTargets: draft?.exportTargets
+  };
+
+  return buildDataPreview(
+    {
+      title: data.title,
+      url: data.url,
+      domain: data.domain,
+      text: data.text,
+      knownTags: knownTagNames(knownMap, previewSettings.tagging.knownTagLimit)
+    },
+    previewSettings,
+    state
+  );
+}
 
 chrome.runtime.onInstalled.addListener(async () => {
   try { await importTagsFromPinboard(); } catch {}
@@ -43,6 +108,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const data = await extractFromActiveTab(tab.id);
       const res = await tagAndMaybeSync(data);
       sendResponse({ ok: true, item: res });
+    } else if (msg?.type === 'preview-current-tab') {
+      const preview = await previewCurrentTab(msg.preview);
+      sendResponse({ ok: true, preview });
     } else if (msg?.type === 'import-pinboard-tags') {
       const n = await importTagsFromPinboard();
       sendResponse({ ok: true, count: n });
