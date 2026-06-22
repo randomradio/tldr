@@ -117,6 +117,10 @@ function draftSettingsFromForm(base: Settings): Settings {
       shared: byId<HTMLSelectElement>('pin_shared').value === 'true',
       toread: byId<HTMLSelectElement>('pin_toread').value === 'true'
     },
+    readwise: {
+      ...base.readwise,
+      saveOnCapture: byId<HTMLInputElement>('readwise_capture').checked
+    },
     tagging: {
       ...base.tagging,
       knownTagLimit: inputNumber('tag_limit', base.tagging.knownTagLimit),
@@ -143,6 +147,7 @@ function getPreviewDraft() {
     privacyMode: byId<HTMLSelectElement>('privacy').value as PrivacyMode,
     pinboardConfigured: isSecretConfigured('pin_token'),
     readwiseConfigured: isSecretConfigured('readwise_token'),
+    readwiseCaptureEnabled: byId<HTMLInputElement>('readwise_capture').checked,
     exportTargets: getExportTargets()
   };
 }
@@ -181,6 +186,7 @@ async function renderDataPreview(): Promise<void> {
   const destinations = buildDestinationPreviews(settings, {
     pinboardConfigured: isSecretConfigured('pin_token'),
     readwiseConfigured: isSecretConfigured('readwise_token'),
+    readwiseCaptureEnabled: byId<HTMLInputElement>('readwise_capture').checked,
     exportTargets: getExportTargets()
   });
   byId<HTMLDivElement>('destination_preview').innerHTML = destinations.map(renderDestination).join('');
@@ -247,6 +253,7 @@ async function load() {
   byId<HTMLInputElement>('llm_max').value = String(s.llm.maxChars);
   byId<HTMLSelectElement>('pin_shared').value = String(s.pinboard.shared) as any;
   byId<HTMLSelectElement>('pin_toread').value = String(s.pinboard.toread) as any;
+  byId<HTMLInputElement>('readwise_capture').checked = Boolean(s.readwise?.saveOnCapture);
   byId<HTMLInputElement>('tag_limit').value = String(s.tagging.knownTagLimit);
   byId<HTMLInputElement>('dedupe').value = String(s.tagging.dedupeThreshold);
   byId<HTMLSelectElement>('privacy').value = s.privacy.mode as any;
@@ -286,6 +293,8 @@ async function save() {
 
   newSettings.pinboard.shared = byId<HTMLSelectElement>('pin_shared').value === 'true';
   newSettings.pinboard.toread = byId<HTMLSelectElement>('pin_toread').value === 'true';
+  if (!newSettings.readwise) newSettings.readwise = {};
+  newSettings.readwise.saveOnCapture = byId<HTMLInputElement>('readwise_capture').checked;
 
   newSettings.tagging.knownTagLimit = parseInt(byId<HTMLInputElement>('tag_limit').value, 10) || 200;
   newSettings.tagging.dedupeThreshold = parseInt(byId<HTMLInputElement>('dedupe').value, 10) || 82;
@@ -505,6 +514,7 @@ function applySecretPresence(input: HTMLInputElement, hasSecret: boolean): void 
   'llm_max',
   'pin_shared',
   'pin_toread',
+  'readwise_capture',
   'tag_limit',
   'dedupe',
   'privacy',

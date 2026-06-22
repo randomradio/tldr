@@ -48,6 +48,7 @@ export interface ExportTargets {
 export interface DestinationState {
   pinboardConfigured: boolean;
   readwiseConfigured: boolean;
+  readwiseCaptureEnabled?: boolean;
   exportTargets?: ExportTargets;
 }
 
@@ -140,6 +141,10 @@ export function buildDestinationPreviews(settings: Settings, state: DestinationS
   })();
 
   const exportTargets = state.exportTargets || {};
+  const readwiseRequested = Boolean(state.readwiseCaptureEnabled || exportTargets.readwise);
+  const readwiseReceives = state.readwiseCaptureEnabled
+    ? ['page URL', 'title', 'tags', 'summary or excerpt', 'source']
+    : ['page URL', 'title', 'tags', 'source'];
 
   return [
     {
@@ -165,12 +170,14 @@ export function buildDestinationPreviews(settings: Settings, state: DestinationS
     {
       id: 'readwise',
       label: 'Readwise Reader',
-      status: exportTargets.readwise ? (state.readwiseConfigured ? 'active' : 'not_configured') : 'disabled',
-      statusText: exportTargets.readwise
-        ? (state.readwiseConfigured ? 'Selected for export.' : 'Selected but token is not configured.')
+      status: readwiseRequested ? (state.readwiseConfigured ? 'active' : 'not_configured') : 'disabled',
+      statusText: readwiseRequested
+        ? state.readwiseConfigured
+          ? (state.readwiseCaptureEnabled ? 'Enabled for new captures.' : 'Selected for export.')
+          : 'Requested but token is not configured.'
         : 'Not selected. Readwise will not receive data.',
-      receives: exportTargets.readwise && state.readwiseConfigured
-        ? ['page URL', 'title', 'tags', 'source']
+      receives: readwiseRequested && state.readwiseConfigured
+        ? readwiseReceives
         : []
     },
     {

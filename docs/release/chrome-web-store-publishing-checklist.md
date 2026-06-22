@@ -27,6 +27,9 @@ This checklist records the current Chrome Web Store publishing flow for `tldr`.
 - [ ] Run the main user flows manually:
   - Preview Current Tab.
   - Save & Tag Current Tab.
+  - Save & Tag Current Tab twice on the same URL; confirm the second run does not duplicate local, Pinboard, or Readwise records.
+  - Save & Tag Current Tab with Readwise capture disabled; confirm Reader is skipped.
+  - Save & Tag Current Tab with Readwise capture enabled; confirm Reader receives URL, title, summary, and tags.
   - Import Pinboard tags.
   - Export selected items to GoodLinks, if configured.
   - Export selected items to Readwise Reader, if configured.

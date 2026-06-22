@@ -15,6 +15,7 @@ export interface Settings {
   };
   readwise?: {
     apiTokenRef?: string;
+    saveOnCapture?: boolean;
   };
   tagging: {
     knownTagLimit: number;

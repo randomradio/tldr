@@ -314,6 +314,20 @@ input[type="checkbox"] {
   gap: 10px;
 }
 
+.setting-row {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.field-note {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .checkbox-group {
   display: flex;
   flex-direction: column;

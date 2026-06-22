@@ -1,4 +1,5 @@
 import { getSecret, getSettings } from '@common/storage';
+import { postReadwiseReaderDocument } from './readwise';
 
 export type SimpleItem = { url: string; title: string; tags: string[] };
 
@@ -28,20 +29,12 @@ export async function exportToReadwise(items: SimpleItem[]): Promise<number> {
   let count = 0;
   for (const it of items) {
     try {
-      const res = await fetch('https://readwise.io/api/reader_api/v3/save', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Token ${token}`
-        },
-        body: JSON.stringify({
-          url: it.url,
-          title: it.title || undefined,
-          tags: it.tags || [],
-          source: 'tldr'
-        })
+      await postReadwiseReaderDocument(token, {
+        url: it.url,
+        title: it.title || undefined,
+        tags: it.tags || [],
+        savedUsing: 'tldr'
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       count += 1;
       await new Promise((r) => setTimeout(r, 120));
     } catch (e) {
@@ -50,4 +43,3 @@ export async function exportToReadwise(items: SimpleItem[]): Promise<number> {
   }
   return count;
 }
-

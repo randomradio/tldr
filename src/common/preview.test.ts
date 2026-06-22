@@ -102,6 +102,20 @@ describe('buildDestinationPreviews', () => {
     expect(JSON.stringify(destinations)).not.toContain('token');
   });
 
+  it('shows Readwise as a capture destination when capture is enabled', () => {
+    const destinations = buildDestinationPreviews(baseSettings, {
+      pinboardConfigured: false,
+      readwiseConfigured: true,
+      readwiseCaptureEnabled: true,
+      exportTargets: { goodlinks: false, readwise: false }
+    });
+
+    expect(destinations.find((destination) => destination.id === 'readwise')).toMatchObject({
+      status: 'active',
+      receives: ['page URL', 'title', 'tags', 'summary or excerpt', 'source']
+    });
+  });
+
   it('marks disabled or unconfigured integrations as not receiving data', () => {
     const destinations = buildDestinationPreviews(baseSettings, {
       pinboardConfigured: false,

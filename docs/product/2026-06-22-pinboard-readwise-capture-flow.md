@@ -69,6 +69,16 @@ Open decision:
 - Apply generated tags when supported.
 - Avoid duplicate Reader documents for the same URL when possible.
 
+Confirmed API notes:
+
+- Reader document create is `POST https://readwise.io/api/v3/save/`.
+- The create payload supports `url`, `title`, `summary`, `tags`, `location`, `category`, `saved_using`, and related metadata.
+- The create endpoint returns `201`, or `200` when the document already exists.
+- Reader document update is `PATCH https://readwise.io/api/v3/update/<document_id>/`.
+- Reader document update supports replacing `tags`.
+- Reader tag list is `GET https://readwise.io/api/v3/tags/`.
+- Official source: https://readwise.io/reader_api
+
 ## Subtle Top-of-Page UI
 
 The page-local UI should appear after capture and sit at the top of the page with minimal visual weight.
@@ -118,7 +128,7 @@ Potential runtime flow:
 
 ## Risks and Questions
 
-- Readwise Reader API capabilities need confirmation for tag creation/update and duplicate detection.
+- Readwise Reader API supports create, update, tag list, and tag replacement, but duplicate handling still needs product testing around the `200` existing-document response.
 - Pinboard description semantics need to be mapped clearly: page excerpt vs user-authored description vs extended field.
 - The extension should avoid surprising writes to both systems if the user expects only one destination.
 - Current permissions may need to be adjusted for a persistent page-local content UI.
