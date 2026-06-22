@@ -18,6 +18,7 @@
 - Sync saved items to Pinboard (including tag import/export), with GoodLinks and Readwise exports on deck.
 - Store everything locally; no backend service required.
 - Navigate a full options dashboard for configuring LLM models, privacy modes, tag behaviour, and integrations.
+- Inspect the Options-page Data Preview before saving: it shows local storage, Chrome sync storage, configured outbound API destinations, privacy-mode payload fields, and screenshot-safe secret states.
 
 ### Getting Started
 - Install Node 18+.
@@ -29,7 +30,7 @@
 ### Packaging & Release Ritual
 - Bump version in `package.json` (the build script mirrors it into `dist/manifest.json` automatically).
 - `npm run build` then `npm run package` (see `scripts/package.mjs`) to produce `tldr-v<version>.zip`.
-- Upload to the Chrome Web Store with updated screenshots and data-collection notes.
+- Upload to the Chrome Web Store with updated screenshots and data-collection notes. Use the Options-page Data Preview as the product-visible source for privacy fields: it distinguishes local data, synced settings, user-configured remote API calls, and the absence of remotely hosted executable code.
 - Tag the release (`git tag v<version> && git push origin --tags`), draft GitHub notes, and attach the zip for sideloaders.
 
 ### Contributing & Feedback

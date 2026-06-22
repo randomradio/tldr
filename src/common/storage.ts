@@ -3,7 +3,7 @@ import type { Settings, Item, TagInfo, SyncRecord } from './types';
 const DEFAULT_SETTINGS: Settings = {
   llm: { baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k2-0905-preview', jsonMode: false, maxChars: 4000 },
   pinboard: { shared: true, toread: false },
-  readwise: {},
+  readwise: { saveOnCapture: false },
   tagging: { knownTagLimit: 200, dedupeThreshold: 82, aliases: {} },
   privacy: { mode: 'title_excerpt' },
   advanced: {}
@@ -95,6 +95,12 @@ export async function getItem(id: string): Promise<Item | undefined> {
   return res[key];
 }
 
+export async function findItemByUrl(url: string): Promise<Item | undefined> {
+  const all = await storageGet<Record<string, unknown>>(chrome.storage.local, null);
+  const items: Item[] = Object.values(all).filter((v): v is Item => Boolean(v && (v as Item).id && (v as Item).url === url));
+  return items.sort((a, b) => b.createdAt - a.createdAt)[0];
+}
+
 export async function listItems(limit = 50): Promise<Item[]> {
   const all = await storageGet<Record<string, unknown>>(chrome.storage.local, null);
   const items: Item[] = Object.values(all).filter((v): v is Item => Boolean(v && (v as Item).id && (v as Item).url));
@@ -115,8 +121,8 @@ export async function setSyncRecord(rec: SyncRecord): Promise<void> {
   await storageSet(chrome.storage.local, { [key]: rec });
 }
 
-export async function getSyncRecord(itemId: string): Promise<SyncRecord | undefined> {
-  const key = `sync:pinboard:${itemId}`;
+export async function getSyncRecord(itemId: string, service: SyncRecord['service'] = 'pinboard'): Promise<SyncRecord | undefined> {
+  const key = `sync:${service}:${itemId}`;
   const res = await storageGet<Record<string, SyncRecord | undefined>>(chrome.storage.local, key);
   return res[key];
 }
