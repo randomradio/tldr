@@ -6,6 +6,7 @@ import { extractFromActiveTab } from './tabs';
 import { captureAndSync } from './pipeline';
 import { importTagsFromPinboard, listRecentFromPinboard } from './pinboard';
 import { exportToGoodlinks, exportToReadwise } from './exporters';
+import { ensureOriginPermission } from './permissions';
 
 type PreviewDraft = {
   llmBaseUrl?: string;
@@ -108,7 +109,13 @@ function renderCaptureStatus(payload: {
 
   const summary = document.createElement('div');
   summary.style.cssText = 'display:flex;align-items:center;gap:8px;min-width:0;flex:1';
-  summary.innerHTML = `<strong style="font-size:12px">${statusText}</strong><span style="color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tagText}</span>`;
+  const statusEl = document.createElement('strong');
+  statusEl.style.fontSize = '12px';
+  statusEl.textContent = statusText;
+  const tagsEl = document.createElement('span');
+  tagsEl.style.cssText = 'color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  tagsEl.textContent = tagText;
+  summary.append(statusEl, tagsEl);
   root.append(summary);
 
   const chips = document.createElement('div');
@@ -203,6 +210,8 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     if (!tab?.id) throw new Error('No active tab');
+    const settings = await getSettings();
+    await ensureOriginPermission(settings.llm.baseUrl);
     await chrome.action.setBadgeBackgroundColor({ color: '#2b7' });
     await chrome.action.setBadgeText({ tabId: tab.id, text: '…' });
     const data = await extractFromActiveTab(tab.id);

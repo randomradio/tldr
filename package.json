@@ -7,6 +7,7 @@
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "package": "node scripts/package.mjs"
   },

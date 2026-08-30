@@ -4,6 +4,19 @@ import type { Item, TagInfo } from '@common/types';
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
+export function mergePinboardTagCounts(
+  existing: Record<string, TagInfo>,
+  incoming: Record<string, number>
+): Record<string, TagInfo> {
+  const next = { ...existing };
+  for (const [tag, count] of Object.entries(incoming)) {
+    const slug = tag.toLowerCase();
+    const prev: TagInfo = next[slug] || { slug, count: 0 };
+    next[slug] = { ...prev, count: Number(count) || 0 };
+  }
+  return next;
+}
+
 export async function addToPinboard(item: Item): Promise<void> {
   const settings = await getSettings();
   const token = settings.pinboard.authTokenRef ? await getSecret(settings.pinboard.authTokenRef) : undefined;
@@ -41,16 +54,13 @@ export async function importTagsFromPinboard(): Promise<number> {
   if (!res.ok) throw new Error(`Pinboard error ${res.status}`);
   const data = await res.json();
   // data is an object: { tag: count, ... }
+  const incoming = Object.fromEntries(
+    Object.entries(data).map(([tag, count]) => [tag, Number(count) || 0])
+  );
   const existing = await getTags();
-  let count = 0;
-  for (const [tag, c] of Object.entries<number>(data)) {
-    const slug = tag.toLowerCase();
-    const prev: TagInfo = existing[slug] || { slug, count: 0 };
-    existing[slug] = { ...prev, count: (prev.count || 0) + (c || 0) };
-    count += 1;
-  }
-  await updateTags(existing);
-  return count;
+  const merged = mergePinboardTagCounts(existing, incoming);
+  await updateTags(merged);
+  return Object.keys(incoming).length;
 }
 
 export interface PinboardPost { url: string; title: string; tags: string[] }

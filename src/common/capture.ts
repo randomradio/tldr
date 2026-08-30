@@ -1,6 +1,6 @@
 import type { Item } from './types';
 
-export type CaptureDestinationId = 'local' | 'pinboard' | 'readwise';
+export type CaptureDestinationId = 'local' | 'pinboard' | 'readwise' | 'llm';
 export type CaptureDestinationStatus = 'success' | 'skipped' | 'error';
 
 export interface CaptureDestinationResult {

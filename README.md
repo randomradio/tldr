@@ -13,7 +13,7 @@
 - **Inspire new ideas.** Beyond summaries, the assistant can remix your saved content: propose blog outlines, connect disparate articles, prompt you with “What if…” questions—anything that nudges you to create rather than collect.
 
 ### Feature List
-- Capture the current tab and extract readable content with the built-in readability fallback.
+- Capture the current tab and extract readable content (`article`/`main`, then body text). Drop a Mozilla Readability build into `static/readability.js` for higher-quality extraction.
 - Auto-tag new items by calling an OpenAI-compatible `chat/completions` endpoint that you configure at runtime—no hard-coded hosts, no forced vendors.
 - Sync saved items to Pinboard (including tag import/export), with GoodLinks and Readwise exports on deck.
 - Store everything locally; no backend service required.
@@ -21,11 +21,13 @@
 - Inspect the Options-page Data Preview before saving: it shows local storage, Chrome sync storage, configured outbound API destinations, privacy-mode payload fields, and screenshot-safe secret states.
 
 ### Getting Started
-- Install Node 18+.
-- `npm install` to pull dependencies.
-- `npm run build` for a one-off bundle (or `npm run watch` while hacking).
+- Install Node 18+ and [pnpm](https://pnpm.io/).
+- `pnpm install` to pull dependencies.
+- `pnpm test` and `pnpm typecheck` for the current automated checks.
+- `pnpm build` for a one-off bundle (or `pnpm watch` while hacking).
 - Load the unpacked extension from the freshly created `dist/` directory in Chrome.
 - Hop into the Options page to plug in your LLM base URL, model name, and optional API key; paste your Pinboard token; choose how much content is shared with the LLM.
+- Page extraction prefers Mozilla Readability if you replace `static/readability.js` with the real library. Otherwise it uses `article`/`main` text, then `document.body.innerText`.
 
 ### Packaging & Release Ritual
 - Bump version in `package.json` (the build script mirrors it into `dist/manifest.json` automatically).

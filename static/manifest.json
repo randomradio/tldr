@@ -4,7 +4,7 @@
   "version": "0.1.1",
   "description": "Save links, extract content, tag with LLM, sync to Pinboard.",
   "action": {
-    "default_title": "tldr settings",
+    "default_title": "Save and tag this page",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"
@@ -18,8 +18,6 @@
     "storage",
     "activeTab",
     "scripting",
-    "notifications",
-    "alarms",
     "contextMenus"
   ],
   "host_permissions": [

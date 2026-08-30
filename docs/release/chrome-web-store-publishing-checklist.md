@@ -85,8 +85,8 @@ This checklist records the current Chrome Web Store publishing flow for `tldr`.
 - [ ] `activeTab`: accesses the page only when the user previews or saves the active tab.
 - [ ] `scripting`: injects the extraction/readability script into the active tab after user action.
 - [ ] `contextMenus`: opens settings from the extension action menu.
-- [ ] `notifications`: verify whether still needed; remove if unused.
-- [ ] `alarms`: verify whether still needed; remove if unused.
+- [x] `notifications`: removed; unused.
+- [x] `alarms`: removed; unused.
 - [ ] Host permissions:
   - Pinboard API for tag import and bookmark sync.
   - Readwise API for Reader export.

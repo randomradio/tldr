@@ -4,10 +4,11 @@ export function slugify(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[^a-z0-9\s-_]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s_-]/gu, '')
     .replace(/[\s_]+/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^-|-$|\s+/g, '');
+    .replace(/^-|-$/g, '');
 }
 
 function levenshtein(a: string, b: string): number {
@@ -36,6 +37,7 @@ export function canonicalizeTags(candidates: string[], known: string[], settings
   const out: string[] = [];
   const knownSet = new Set(known);
   for (const t of candidates.map(slugify)) {
+    if (!t) continue;
     const aliasTo = settings.tagging.aliases[t];
     if (aliasTo) {
       if (!out.includes(aliasTo)) out.push(aliasTo);

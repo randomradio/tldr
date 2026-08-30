@@ -66,7 +66,7 @@ export async function getSettings(): Promise<Settings> {
 }
 
 export async function setSettings(settings: Settings): Promise<void> {
-  await storageSet(chrome.storage.sync, { settings });
+  await storageSet(chrome.storage.sync, { settings: mergeSettings(settings) });
 }
 
 export async function getSecret(key: string): Promise<string | undefined> {

@@ -9,7 +9,7 @@ import { addToPinboard } from './pinboard';
 import { readwiseInputFromItem, saveToReadwiseReader } from './readwise';
 
 function uuid(): string {
-  return crypto.getRandomValues(new Uint8Array(16)).reduce((p, c, i) => p + (i === 6 ? (c & 0x0f | 0x40) : i === 8 ? (c & 0x3f | 0x80) : c).toString(16).padStart(2, '0'), '');
+  return crypto.randomUUID();
 }
 
 function destination(
@@ -69,19 +69,35 @@ export async function captureAndSync(input: { url: string; title: string; domain
     && existingItem.title === input.title
     && existingItem.domain === input.domain
     && (existingItem.excerpt || '') === (excerpt || ''));
-  const tags = canReuseExistingTags
-    ? existingItem!.tags
-    : canonicalizeTags(
-      await generateTags({ title: input.title, url: input.url, domain: input.domain, excerpt, knownTags: known }),
-      known,
-      settings
-    ).map(slugify);
 
-  // update known tags counts
-  if (!canReuseExistingTags) {
+  const destinations: CaptureDestinationResult[] = [];
+  let tags: string[];
+  if (canReuseExistingTags) {
+    tags = existingItem!.tags;
+    destinations.push(destination('llm', 'LLM tags', 'skipped', 'Reused existing tags'));
+  } else {
+    try {
+      tags = canonicalizeTags(
+        await generateTags({ title: input.title, url: input.url, domain: input.domain, excerpt, knownTags: known }),
+        known,
+        settings
+      ).map(slugify).filter(Boolean);
+      destinations.push(destination(
+        'llm',
+        'LLM tags',
+        'success',
+        tags.length ? `Tagged: ${tags.slice(0, 5).join(', ')}` : 'No tags generated'
+      ));
+    } catch (err) {
+      tags = existingItem?.tags || [];
+      destinations.push(destination('llm', 'LLM tags', 'error', 'Tagging failed', { error: errorMessage(err) }));
+    }
+  }
+
+  if (!canReuseExistingTags && destinations.at(-1)?.status === 'success') {
     for (const t of tags) {
       if (existingItem?.tags.includes(t)) continue;
-      knownMap[t] = knownMap[t] || { slug: t, count: 0 } as any;
+      knownMap[t] = knownMap[t] || { slug: t, count: 0 };
       knownMap[t].count += 1;
     }
     await updateTags(knownMap);
@@ -105,9 +121,9 @@ export async function captureAndSync(input: { url: string; title: string; domain
   delete item.lastError;
   await upsertItem(item);
 
-  const destinations: CaptureDestinationResult[] = [
+  destinations.unshift(
     destination('local', 'Local library', 'success', unchangedExistingItem ? 'Already saved locally' : existingItem ? 'Updated local item' : 'Saved locally')
-  ];
+  );
   const fingerprint = captureSyncFingerprint(item);
 
   if (settings.pinboard.authTokenRef) {

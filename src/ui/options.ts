@@ -7,21 +7,14 @@ import {
   type DestinationPreview,
   type ExportTargets
 } from '@common/preview';
+import { escapeHtml, safeHttpUrl } from '@common/html';
+import { originPattern } from '@common/origins';
 import type { PrivacyMode, Settings } from '@common/types';
 
 function byId<T extends HTMLElement>(id: string) { return document.getElementById(id) as T; }
 
 const SECRET_PLACEHOLDER = '••••••••';
 let loadedSettings: Settings | undefined;
-
-function originPattern(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.origin}/*`;
-  } catch {
-    return null;
-  }
-}
 
 function containsOriginPermission(pattern: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -73,14 +66,6 @@ function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
       resolve(tabs && tabs.length ? tabs[0] : undefined);
     });
   });
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 function inputNumber(id: string, fallback: number): number {
@@ -301,7 +286,10 @@ async function save() {
   newSettings.privacy.mode = byId<HTMLSelectElement>('privacy').value as any;
   try {
     newSettings.advanced = JSON.parse(byId<HTMLTextAreaElement>('adv').value || '{}');
-  } catch {}
+  } catch {
+    statusEl.textContent = 'Advanced config must be valid JSON.';
+    return;
+  }
 
   await persistSecretField({
     inputId: 'llm_key',
@@ -551,11 +539,9 @@ function renderPinList() {
     return;
   }
   const rows = pinItems.map((it, i) => {
-    const tags = it.tags.join(', ');
-    const safeTitle = (it.title || it.url)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;');
-    const safeUrl = it.url.replace(/"/g, '&quot;');
+    const tags = escapeHtml(it.tags.join(', '));
+    const safeTitle = escapeHtml(it.title || it.url);
+    const safeUrl = escapeHtml(safeHttpUrl(it.url));
     return `<div class="pin-item">
       <div class="checkbox-row">
         <input type="checkbox" data-idx="${i}" class="pin_sel" />
