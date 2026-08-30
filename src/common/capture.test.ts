@@ -59,4 +59,23 @@ describe('hasCaptureError', () => {
 
     expect(hasCaptureError(result)).toBe(true);
   });
+
+  it('is false when every destination succeeded or was skipped', () => {
+    expect(hasCaptureError({
+      item: {
+        id: '1',
+        url: 'https://example.test/post',
+        domain: 'example.test',
+        title: 'Post',
+        createdAt: 1,
+        tags: ['ai'],
+        status: 'tagged'
+      },
+      tags: ['ai'],
+      destinations: [
+        { id: 'local', label: 'Local library', status: 'success', message: 'Saved locally' },
+        { id: 'pinboard', label: 'Pinboard', status: 'skipped', message: 'Pinboard token not configured' }
+      ]
+    })).toBe(false);
+  });
 });

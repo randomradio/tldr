@@ -5,6 +5,8 @@ import {
   buildDestinationPreviews,
   buildLlmPayloadPreview,
   chatCompletionsUrl,
+  privacyModeDescription,
+  privacyModeLabel,
   selectExcerpt
 } from './preview';
 
@@ -50,6 +52,22 @@ describe('chatCompletionsUrl', () => {
   });
 });
 
+describe('privacyModeLabel', () => {
+  it('labels each privacy mode', () => {
+    expect(privacyModeLabel('title_only')).toBe('Title only');
+    expect(privacyModeLabel('title_excerpt')).toBe('Title + excerpt');
+    expect(privacyModeLabel('full_truncated')).toBe('Readable text, truncated');
+  });
+});
+
+describe('privacyModeDescription', () => {
+  it('describes what each mode sends', () => {
+    expect(privacyModeDescription('title_only')).toContain('No page text');
+    expect(privacyModeDescription('title_excerpt')).toContain('short excerpt');
+    expect(privacyModeDescription('full_truncated')).toContain('character limit');
+  });
+});
+
 describe('selectExcerpt', () => {
   it('omits page text in title-only mode', () => {
     expect(selectExcerpt('page text', 'title_only', 1000)).toBeUndefined();
@@ -61,6 +79,11 @@ describe('selectExcerpt', () => {
 
   it('uses the configured max character limit in full-truncated mode', () => {
     expect(selectExcerpt('x'.repeat(1200), 'full_truncated', 450)).toHaveLength(450);
+  });
+
+  it('returns undefined for empty text', () => {
+    expect(selectExcerpt('', 'title_excerpt', 1000)).toBeUndefined();
+    expect(selectExcerpt(undefined, 'full_truncated', 1000)).toBeUndefined();
   });
 });
 
@@ -82,6 +105,25 @@ describe('buildLlmPayloadPreview', () => {
     });
 
     expect(preview.fields.some((field) => field.key === 'excerpt')).toBe(false);
+  });
+
+  it('omits the endpoint when the base URL is empty', () => {
+    const preview = buildLlmPayloadPreview(previewInput, {
+      ...baseSettings,
+      llm: { ...baseSettings.llm, baseUrl: '' }
+    });
+    expect(preview.endpoint).toBeUndefined();
+  });
+
+  it('labels readable text in full-truncated mode', () => {
+    const preview = buildLlmPayloadPreview(previewInput, {
+      ...baseSettings,
+      privacy: { mode: 'full_truncated' }
+    });
+    expect(preview.fields.find((field) => field.key === 'excerpt')).toMatchObject({
+      label: 'Readable text',
+      charCount: 1000
+    });
   });
 });
 
@@ -133,6 +175,19 @@ describe('buildDestinationPreviews', () => {
     });
     expect(destinations.find((destination) => destination.id === 'goodlinks')).toMatchObject({
       status: 'disabled',
+      receives: []
+    });
+  });
+
+  it('marks Readwise as requested but unconfigured', () => {
+    const destinations = buildDestinationPreviews(baseSettings, {
+      pinboardConfigured: false,
+      readwiseConfigured: false,
+      readwiseCaptureEnabled: true
+    });
+    expect(destinations.find((destination) => destination.id === 'readwise')).toMatchObject({
+      status: 'not_configured',
+      statusText: 'Requested but token is not configured.',
       receives: []
     });
   });

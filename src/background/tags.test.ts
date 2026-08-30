@@ -26,8 +26,9 @@ describe('slugify', () => {
 });
 
 describe('similarity', () => {
-  it('scores exact slugs at 100', () => {
+  it('scores exact slugs at 100 and different slugs lower', () => {
     expect(similarity('machine-learning', 'machine-learning')).toBe(100);
+    expect(similarity('ai', 'climate')).toBeLessThan(50);
   });
 });
 
@@ -42,5 +43,9 @@ describe('canonicalizeTags', () => {
 
   it('keeps genuinely new tags and drops empty slugs', () => {
     expect(canonicalizeTags(['climate-tech', '!!!'], ['ai'], settings)).toEqual(['climate-tech']);
+  });
+
+  it('dedupes repeated candidates', () => {
+    expect(canonicalizeTags(['AI', 'ai', 'AI'], ['ai'], settings)).toEqual(['ai']);
   });
 });

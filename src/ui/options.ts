@@ -4,12 +4,12 @@ import {
   privacyModeDescription,
   privacyModeLabel,
   type DataPreview,
-  type DestinationPreview,
   type ExportTargets
 } from '@common/preview';
 import { escapeHtml, safeHttpUrl } from '@common/html';
 import { originPattern } from '@common/origins';
 import type { PrivacyMode, Settings } from '@common/types';
+import { renderDestination } from './options-helpers';
 
 function byId<T extends HTMLElement>(id: string) { return document.getElementById(id) as T; }
 
@@ -135,32 +135,6 @@ function getPreviewDraft() {
     readwiseCaptureEnabled: byId<HTMLInputElement>('readwise_capture').checked,
     exportTargets: getExportTargets()
   };
-}
-
-function destinationStatusLabel(status: DestinationPreview['status']): string {
-  switch (status) {
-    case 'active':
-      return 'Active';
-    case 'not_configured':
-      return 'Not configured';
-    case 'disabled':
-      return 'Disabled';
-  }
-}
-
-function renderDestination(destination: DestinationPreview): string {
-  const receives = destination.receives.length
-    ? destination.receives.map((item) => `<span class="mini-pill">${escapeHtml(item)}</span>`).join('')
-    : '<span class="mini-pill">No data sent</span>';
-
-  return `<div class="destination">
-    <div class="destination-head">
-      <div class="destination-title">${escapeHtml(destination.label)}</div>
-      <div class="destination-status ${destination.status}">${destinationStatusLabel(destination.status)}</div>
-    </div>
-    <div class="destination-copy">${escapeHtml(destination.statusText)}</div>
-    <div class="destination-receives">${receives}</div>
-  </div>`;
 }
 
 async function renderDataPreview(): Promise<void> {

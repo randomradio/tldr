@@ -1,6 +1,7 @@
-import { hasCaptureError, type CaptureDestinationResult, type CaptureResult } from '@common/capture';
+import { hasCaptureError, type CaptureResult } from '@common/capture';
 import { RETRY_DESTINATION, SHOW_CAPTURE, UPDATE_TAGS } from '@common/messages';
 import { parseTagInput } from '@common/tags-input';
+import { toastChipColor, visibleToastDestinations } from './toast-helpers';
 
 declare global {
   interface Window {
@@ -28,16 +29,6 @@ function sendMessage<T>(message: unknown): Promise<T> {
       resolve(res as T);
     });
   });
-}
-
-function chipColor(status: string): string {
-  if (status === 'success') return '#0f766e';
-  if (status === 'skipped') return '#64748b';
-  return '#b45309';
-}
-
-function visibleDestinations(destinations: CaptureDestinationResult[]): CaptureDestinationResult[] {
-  return destinations.filter((destination) => destination.status !== 'skipped' || destination.message.startsWith('Already') || destination.message === 'Tags updated');
 }
 
 function clearTimer(): void {
@@ -96,13 +87,13 @@ function renderToast(capture: CaptureResult): void {
 
   const chips = document.createElement('div');
   chips.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap';
-  for (const dest of visibleDestinations(capture.destinations)) {
+  for (const dest of visibleToastDestinations(capture.destinations)) {
     const chip = dest.status === 'error' && canEdit
       ? document.createElement('button')
       : document.createElement('span');
     chip.title = dest.error || dest.message;
     chip.textContent = dest.status === 'error' && canEdit ? `Retry ${dest.label}` : dest.label;
-    chip.style.cssText = `border:1px solid rgba(15,23,42,.1);border-radius:999px;padding:3px 7px;color:${chipColor(dest.status)};background:rgba(248,250,252,.92);font-weight:600;font:inherit;cursor:${chip.tagName === 'BUTTON' ? 'pointer' : 'default'}`;
+    chip.style.cssText = `border:1px solid rgba(15,23,42,.1);border-radius:999px;padding:3px 7px;color:${toastChipColor(dest.status)};background:rgba(248,250,252,.92);font-weight:600;font:inherit;cursor:${chip.tagName === 'BUTTON' ? 'pointer' : 'default'}`;
     if (chip instanceof HTMLButtonElement) {
       chip.type = 'button';
       chip.addEventListener('click', async () => {

@@ -1,47 +1,13 @@
 import { getSettings, getTags } from '@common/storage';
 import { hasCaptureError, type CaptureResult } from '@common/capture';
-import { buildDataPreview, type DestinationState, type ExportTargets } from '@common/preview';
-import type { PrivacyMode, Settings } from '@common/types';
+import { buildDataPreview, type DestinationState } from '@common/preview';
 import { RETRY_DESTINATION, SHOW_CAPTURE, UPDATE_TAGS } from '@common/messages';
 import { extractFromActiveTab } from './tabs';
 import { captureAndSync, retryDestination, updateCapturedTags } from './pipeline';
 import { importTagsFromPinboard, listRecentFromPinboard } from './pinboard';
 import { exportToGoodlinks, exportToReadwise } from './exporters';
 import { ensureOriginPermission } from './permissions';
-
-type PreviewDraft = {
-  llmBaseUrl?: string;
-  llmModel?: string;
-  llmMaxChars?: number;
-  privacyMode?: PrivacyMode;
-  pinboardConfigured?: boolean;
-  readwiseConfigured?: boolean;
-  readwiseCaptureEnabled?: boolean;
-  exportTargets?: ExportTargets;
-};
-
-function settingsWithPreviewDraft(settings: Settings, draft?: PreviewDraft): Settings {
-  if (!draft) return settings;
-  return {
-    ...settings,
-    llm: {
-      ...settings.llm,
-      baseUrl: draft.llmBaseUrl ?? settings.llm.baseUrl,
-      model: draft.llmModel ?? settings.llm.model,
-      maxChars: Number.isFinite(draft.llmMaxChars) ? Number(draft.llmMaxChars) : settings.llm.maxChars
-    },
-    privacy: {
-      ...settings.privacy,
-      mode: draft.privacyMode ?? settings.privacy.mode
-    }
-  };
-}
-
-function knownTagNames(map: Awaited<ReturnType<typeof getTags>>, limit: number): string[] {
-  return Object.keys(map)
-    .sort((a, b) => (map[b]?.count || 0) - (map[a]?.count || 0))
-    .slice(0, limit);
-}
+import { knownTagNames, settingsWithPreviewDraft, type PreviewDraft } from './preview-draft';
 
 async function previewCurrentTab(draft?: PreviewDraft) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

@@ -3,7 +3,7 @@ import { chatCompletionsUrl } from '@common/preview';
 
 export interface LlmTagResponse { tags: { name: string; confidence?: number }[] }
 
-function extractErrorDetail(raw: string): string | undefined {
+export function extractErrorDetail(raw: string): string | undefined {
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw) as {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Item } from './types';
-import { applyItemToIndex, buildItemIndex, emptyItemIndex, isStoredItem } from './item-index';
+import { applyItemToIndex, buildItemIndex, emptyItemIndex, isItemIndex, isStoredItem, itemKey } from './item-index';
 
 function item(partial: Partial<Item> & Pick<Item, 'id' | 'url' | 'createdAt'>): Item {
   return {
@@ -12,10 +12,33 @@ function item(partial: Partial<Item> & Pick<Item, 'id' | 'url' | 'createdAt'>): 
   };
 }
 
+describe('itemKey', () => {
+  it('prefixes item ids', () => {
+    expect(itemKey('abc')).toBe('item:abc');
+  });
+});
+
 describe('isStoredItem', () => {
-  it('rejects secrets and tag maps', () => {
+  it('accepts saved items and rejects secrets and tag maps', () => {
+    expect(isStoredItem(item({ id: '1', url: 'https://example.test', createdAt: 1 }))).toBe(true);
     expect(isStoredItem('sk-secret')).toBe(false);
     expect(isStoredItem({ ai: { slug: 'ai', count: 1 } })).toBe(false);
+    expect(isStoredItem(null)).toBe(false);
+  });
+});
+
+describe('isItemIndex', () => {
+  it('accepts a valid index and rejects other shapes', () => {
+    expect(isItemIndex({ ids: ['a'], byUrl: { 'https://example.test': 'a' } })).toBe(true);
+    expect(isItemIndex({ ids: ['a'], byUrl: ['a'] })).toBe(false);
+    expect(isItemIndex({ ids: 'a', byUrl: {} })).toBe(false);
+    expect(isItemIndex(null)).toBe(false);
+  });
+});
+
+describe('emptyItemIndex', () => {
+  it('returns an empty index', () => {
+    expect(emptyItemIndex()).toEqual({ ids: [], byUrl: {} });
   });
 });
 

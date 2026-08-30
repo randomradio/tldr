@@ -14,4 +14,10 @@ describe('mergePinboardTagCounts', () => {
       reading: { slug: 'reading', count: 5 }
     });
   });
+
+  it('treats non-numeric Pinboard counts as zero', () => {
+    expect(mergePinboardTagCounts({}, { broken: Number.NaN })).toEqual({
+      broken: { slug: 'broken', count: 0 }
+    });
+  });
 });

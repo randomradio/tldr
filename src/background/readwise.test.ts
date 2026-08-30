@@ -1,11 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Item } from '@common/types';
+
+vi.mock('@common/storage', () => ({
+  getSettings: vi.fn(),
+  getSecret: vi.fn()
+}));
+
+import { getSecret, getSettings } from '@common/storage';
 import {
   buildReadwiseSaveBody,
   buildReadwiseUpdateBody,
   parseReadwiseDocumentResponse,
+  patchReadwiseReaderDocument,
+  postReadwiseReaderDocument,
   readwiseInputFromItem,
   readwiseUpdateUrl,
+  saveToReadwiseReader,
   syncReadwiseDocument
 } from './readwise';
 
@@ -47,6 +57,22 @@ describe('buildReadwiseSaveBody', () => {
 describe('buildReadwiseUpdateBody', () => {
   it('includes only provided update fields', () => {
     expect(buildReadwiseUpdateBody({ tags: ['ai'] })).toEqual({ tags: ['ai'] });
+    expect(buildReadwiseUpdateBody({
+      title: 'Title',
+      summary: 'Summary',
+      tags: ['ai']
+    })).toEqual({
+      title: 'Title',
+      summary: 'Summary',
+      tags: ['ai']
+    });
+    expect(buildReadwiseUpdateBody({})).toEqual({});
+  });
+});
+
+describe('readwiseUpdateUrl', () => {
+  it('encodes the document id in the PATCH URL', () => {
+    expect(readwiseUpdateUrl('doc/1')).toBe('https://readwise.io/api/v3/update/doc%2F1/');
   });
 });
 
@@ -65,6 +91,14 @@ describe('parseReadwiseDocumentResponse', () => {
   it('treats HTTP 201 as a newly created document', () => {
     expect(parseReadwiseDocumentResponse(201, { id: 'doc-2' })).toEqual({
       id: 'doc-2',
+      url: undefined,
+      alreadyExists: false
+    });
+  });
+
+  it('ignores non-object payloads', () => {
+    expect(parseReadwiseDocumentResponse(201, 'nope')).toEqual({
+      id: undefined,
       url: undefined,
       alreadyExists: false
     });
@@ -92,6 +126,114 @@ describe('readwiseInputFromItem', () => {
       tags: ['ai', 'reading'],
       savedUsing: 'tldr',
       documentId: 'doc-1'
+    });
+  });
+
+  it('falls back to the URL when the title is empty', () => {
+    expect(readwiseInputFromItem({
+      id: '1',
+      url: 'https://example.test/post',
+      domain: 'example.test',
+      title: '',
+      createdAt: 1,
+      tags: [],
+      status: 'tagged'
+    }).title).toBe('https://example.test/post');
+  });
+});
+
+describe('postReadwiseReaderDocument', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('posts a save payload and parses the response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, {
+      id: 'doc-9',
+      url: 'https://read.readwise.io/read/doc-9'
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(postReadwiseReaderDocument('tok', {
+      url: 'https://example.test/post',
+      title: 'Post'
+    })).resolves.toEqual({
+      id: 'doc-9',
+      url: 'https://read.readwise.io/read/doc-9',
+      alreadyExists: false
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://readwise.io/api/v3/save/');
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+  });
+
+  it('throws on a non-OK save response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(400, {})));
+    await expect(postReadwiseReaderDocument('tok', { url: 'https://example.test/post' })).rejects.toThrow('Readwise error 400');
+  });
+});
+
+describe('patchReadwiseReaderDocument', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('patches tags and keeps the document id when the body omits it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, {})));
+    await expect(patchReadwiseReaderDocument('tok', 'doc-1', { tags: ['ai'] })).resolves.toEqual({
+      id: 'doc-1',
+      url: undefined,
+      alreadyExists: true
+    });
+  });
+
+  it('throws on a non-OK update response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(404, {})));
+    await expect(patchReadwiseReaderDocument('tok', 'doc-1', { tags: ['ai'] })).rejects.toThrow('Readwise error 404');
+  });
+});
+
+describe('saveToReadwiseReader', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('throws when no token is configured', async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      llm: { baseUrl: 'https://llm.example.test/v1', model: 'test', jsonMode: true, maxChars: 1000 },
+      pinboard: { shared: true, toread: false },
+      readwise: {},
+      tagging: { knownTagLimit: 200, dedupeThreshold: 82, aliases: {} },
+      privacy: { mode: 'title_excerpt' }
+    });
+    await expect(saveToReadwiseReader({ url: 'https://example.test/post' })).rejects.toThrow('Readwise token not set');
+  });
+
+  it('throws when the token reference has no stored secret', async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      llm: { baseUrl: 'https://llm.example.test/v1', model: 'test', jsonMode: true, maxChars: 1000 },
+      pinboard: { shared: true, toread: false },
+      readwise: { apiTokenRef: 'readwise_token' },
+      tagging: { knownTagLimit: 200, dedupeThreshold: 82, aliases: {} },
+      privacy: { mode: 'title_excerpt' }
+    });
+    vi.mocked(getSecret).mockResolvedValue(undefined);
+    await expect(saveToReadwiseReader({ url: 'https://example.test/post' })).rejects.toThrow('Readwise token not set');
+  });
+
+  it('loads the stored token and syncs the document', async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      llm: { baseUrl: 'https://llm.example.test/v1', model: 'test', jsonMode: true, maxChars: 1000 },
+      pinboard: { shared: true, toread: false },
+      readwise: { apiTokenRef: 'readwise_token' },
+      tagging: { knownTagLimit: 200, dedupeThreshold: 82, aliases: {} },
+      privacy: { mode: 'title_excerpt' }
+    });
+    vi.mocked(getSecret).mockResolvedValue('rw_token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(201, { id: 'doc-3' })));
+
+    await expect(saveToReadwiseReader({ url: 'https://example.test/post', title: 'Post' })).resolves.toMatchObject({
+      id: 'doc-3',
+      alreadyExists: false
     });
   });
 });

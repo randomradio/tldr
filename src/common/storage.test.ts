@@ -1,7 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Item } from './types';
 import { ITEM_INDEX_KEY } from './item-index';
-import { findItemByUrl, getItem, listItems, upsertItem } from './storage';
+import {
+  findItemByUrl,
+  getItem,
+  getSecret,
+  getSettings,
+  getSyncRecord,
+  getTags,
+  listItems,
+  setSecret,
+  setSettings,
+  setSyncRecord,
+  updateTags,
+  upsertItem
+} from './storage';
 
 function createMemoryArea() {
   let data: Record<string, unknown> = {};
@@ -97,5 +110,127 @@ describe('item storage index', () => {
       ids: ['legacy'],
       byUrl: { 'https://example.test/legacy': 'legacy' }
     });
+  });
+
+  it('returns undefined for a URL that is not indexed', async () => {
+    expect(await findItemByUrl('https://missing.test')).toBeUndefined();
+    expect(await listItems()).toEqual([]);
+  });
+
+  it('rewrites the index when an item URL changes', async () => {
+    await upsertItem(sample('a', 'https://example.test/a', 1));
+    await upsertItem({ ...sample('a', 'https://example.test/moved', 2), title: 'moved' });
+
+    expect(await findItemByUrl('https://example.test/a')).toBeUndefined();
+    expect((await findItemByUrl('https://example.test/moved'))?.title).toBe('moved');
+  });
+});
+
+describe('getSettings and setSettings', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { chrome: unknown }).chrome = {
+      runtime: { lastError: undefined },
+      storage: {
+        local: createMemoryArea(),
+        sync: createMemoryArea()
+      }
+    };
+  });
+
+  it('returns merged defaults when nothing is stored', async () => {
+    const settings = await getSettings();
+    expect(settings.privacy.mode).toBe('title_excerpt');
+    expect(settings.llm.model).toBe('kimi-k2-0905-preview');
+    expect(settings.readwise?.saveOnCapture).toBe(false);
+  });
+
+  it('rejects when chrome.storage reports lastError', async () => {
+    (chrome.runtime as { lastError?: { message: string } }).lastError = { message: 'quota exceeded' };
+    await expect(getSettings()).rejects.toThrow('quota exceeded');
+  });
+
+  it('persists a merged settings object', async () => {
+    await setSettings({
+      llm: { baseUrl: 'http://localhost:11434/v1', model: 'llama3', jsonMode: true, maxChars: 100 },
+      pinboard: { shared: false, toread: true },
+      tagging: { knownTagLimit: 10, dedupeThreshold: 90, aliases: {} },
+      privacy: { mode: 'title_only' }
+    });
+    const settings = await getSettings();
+    expect(settings.llm.model).toBe('llama3');
+    expect(settings.pinboard.shared).toBe(false);
+    expect(settings.privacy.mode).toBe('title_only');
+    expect(settings.readwise?.saveOnCapture).toBe(false);
+  });
+});
+
+describe('getSecret and setSecret', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { chrome: unknown }).chrome = {
+      runtime: { lastError: undefined },
+      storage: {
+        local: createMemoryArea(),
+        sync: createMemoryArea()
+      }
+    };
+  });
+
+  it('stores, reads, and clears secrets', async () => {
+    expect(await getSecret('')).toBeUndefined();
+    await setSecret('', 'ignored');
+    await setSecret('llm_api_key', 'sk-test');
+    expect(await getSecret('llm_api_key')).toBe('sk-test');
+    await setSecret('llm_api_key', '');
+    expect(await getSecret('llm_api_key')).toBeUndefined();
+  });
+});
+
+describe('getTags and updateTags', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { chrome: unknown }).chrome = {
+      runtime: { lastError: undefined },
+      storage: {
+        local: createMemoryArea(),
+        sync: createMemoryArea()
+      }
+    };
+  });
+
+  it('returns an empty map by default and persists updates', async () => {
+    expect(await getTags()).toEqual({});
+    await updateTags({ ai: { slug: 'ai', count: 2 } });
+    expect(await getTags()).toEqual({ ai: { slug: 'ai', count: 2 } });
+  });
+});
+
+describe('getSyncRecord and setSyncRecord', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { chrome: unknown }).chrome = {
+      runtime: { lastError: undefined },
+      storage: {
+        local: createMemoryArea(),
+        sync: createMemoryArea()
+      }
+    };
+  });
+
+  it('stores and reads a sync record, defaulting the service to pinboard', async () => {
+    expect(await getSyncRecord('item-1')).toBeUndefined();
+    await setSyncRecord({
+      itemId: 'item-1',
+      service: 'pinboard',
+      status: 'ok',
+      lastHash: 'hash',
+      updatedAt: 10
+    });
+    expect(await getSyncRecord('item-1')).toMatchObject({ status: 'ok', lastHash: 'hash' });
+    await setSyncRecord({
+      itemId: 'item-1',
+      service: 'readwise',
+      status: 'error',
+      lastError: 'nope',
+      updatedAt: 11
+    });
+    expect(await getSyncRecord('item-1', 'readwise')).toMatchObject({ status: 'error', lastError: 'nope' });
   });
 });
