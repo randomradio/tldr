@@ -1,5 +1,5 @@
 import { getSecret, getSettings } from '@common/storage';
-import { postReadwiseReaderDocument } from './readwise';
+import { syncReadwiseDocument } from './readwise';
 
 export type SimpleItem = { url: string; title: string; tags: string[] };
 
@@ -29,7 +29,7 @@ export async function exportToReadwise(items: SimpleItem[]): Promise<number> {
   let count = 0;
   for (const it of items) {
     try {
-      await postReadwiseReaderDocument(token, {
+      await syncReadwiseDocument(token, {
         url: it.url,
         title: it.title || undefined,
         tags: it.tags || [],

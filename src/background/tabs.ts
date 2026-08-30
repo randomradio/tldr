@@ -6,8 +6,7 @@ export interface ExtractedContent {
 }
 
 export async function extractFromActiveTab(tabId: number): Promise<ExtractedContent> {
-  // Inject into the isolated world so a real Readability build can attach to this world.
-  // static/readability.js ships as a stub until replaced with Mozilla Readability.
+  // Inject the bundled Mozilla Readability build into the isolated world.
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['readability.js'] });
   } catch {

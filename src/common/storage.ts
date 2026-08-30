@@ -1,4 +1,11 @@
 import type { Settings, Item, TagInfo, SyncRecord } from './types';
+import {
+  ITEM_INDEX_KEY,
+  applyItemToIndex,
+  buildItemIndex,
+  isItemIndex,
+  itemKey
+} from './item-index';
 
 const DEFAULT_SETTINGS: Settings = {
   llm: { baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k2-0905-preview', jsonMode: false, maxChars: 4000 },
@@ -84,27 +91,45 @@ export async function setSecret(key: string, value: string): Promise<void> {
   await storageSet(chrome.storage.local, { [key]: value });
 }
 
+async function getOrCreateItemIndex() {
+  const stored = await storageGet<Record<string, unknown>>(chrome.storage.local, ITEM_INDEX_KEY);
+  if (isItemIndex(stored[ITEM_INDEX_KEY])) return stored[ITEM_INDEX_KEY];
+
+  const all = await storageGet<Record<string, unknown>>(chrome.storage.local, null);
+  const built = buildItemIndex(all);
+  await storageSet(chrome.storage.local, { [ITEM_INDEX_KEY]: built });
+  return built;
+}
+
 export async function upsertItem(item: Item): Promise<void> {
-  const key = `item:${item.id}`;
-  await storageSet(chrome.storage.local, { [key]: item });
+  const key = itemKey(item.id);
+  const existing = await getItem(item.id);
+  const index = applyItemToIndex(await getOrCreateItemIndex(), item, existing?.url);
+  await storageSet(chrome.storage.local, { [key]: item, [ITEM_INDEX_KEY]: index });
 }
 
 export async function getItem(id: string): Promise<Item | undefined> {
-  const key = `item:${id}`;
+  const key = itemKey(id);
   const res = await storageGet<Record<string, Item | undefined>>(chrome.storage.local, key);
   return res[key];
 }
 
 export async function findItemByUrl(url: string): Promise<Item | undefined> {
-  const all = await storageGet<Record<string, unknown>>(chrome.storage.local, null);
-  const items: Item[] = Object.values(all).filter((v): v is Item => Boolean(v && (v as Item).id && (v as Item).url === url));
-  return items.sort((a, b) => b.createdAt - a.createdAt)[0];
+  const index = await getOrCreateItemIndex();
+  const id = index.byUrl[url];
+  if (!id) return undefined;
+  return getItem(id);
 }
 
 export async function listItems(limit = 50): Promise<Item[]> {
-  const all = await storageGet<Record<string, unknown>>(chrome.storage.local, null);
-  const items: Item[] = Object.values(all).filter((v): v is Item => Boolean(v && (v as Item).id && (v as Item).url));
-  return items.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+  const index = await getOrCreateItemIndex();
+  const ids = index.ids.slice(0, Math.max(0, limit));
+  if (!ids.length) return [];
+  const res = await storageGet<Record<string, Item | undefined>>(chrome.storage.local, ids.map(itemKey));
+  return ids
+    .map((id) => res[itemKey(id)])
+    .filter((item): item is Item => Boolean(item))
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function updateTags(map: Record<string, TagInfo>): Promise<void> {

@@ -39,6 +39,7 @@ export interface Item {
   tags: string[]; // slugs
   status: 'new' | 'tagged' | 'synced' | 'error';
   lastError?: string;
+  readwiseDocumentId?: string;
 }
 
 export interface TagInfo {

@@ -2,8 +2,9 @@ import { getSettings, getTags } from '@common/storage';
 import { hasCaptureError, type CaptureResult } from '@common/capture';
 import { buildDataPreview, type DestinationState, type ExportTargets } from '@common/preview';
 import type { PrivacyMode, Settings } from '@common/types';
+import { RETRY_DESTINATION, SHOW_CAPTURE, UPDATE_TAGS } from '@common/messages';
 import { extractFromActiveTab } from './tabs';
-import { captureAndSync } from './pipeline';
+import { captureAndSync, retryDestination, updateCapturedTags } from './pipeline';
 import { importTagsFromPinboard, listRecentFromPinboard } from './pinboard';
 import { exportToGoodlinks, exportToReadwise } from './exporters';
 import { ensureOriginPermission } from './permissions';
@@ -72,111 +73,13 @@ async function previewCurrentTab(draft?: PreviewDraft) {
   );
 }
 
-function renderCaptureStatus(payload: {
-  title: string;
-  url: string;
-  tags: string[];
-  destinations: { label: string; status: string; message: string; url?: string; error?: string }[];
-}) {
-  const existing = document.getElementById('tldr-capture-status');
-  if (existing) existing.remove();
-
-  const root = document.createElement('div');
-  root.id = 'tldr-capture-status';
-  const hasError = payload.destinations.some((destination) => destination.status === 'error');
-  const statusText = hasError ? 'Saved with issues' : 'Saved';
-  const tagText = payload.tags.length ? payload.tags.slice(0, 5).join(', ') : 'No tags';
-
-  root.style.cssText = [
-    'position:fixed',
-    'top:10px',
-    'left:50%',
-    'transform:translateX(-50%)',
-    'z-index:2147483647',
-    'max-width:min(760px,calc(100vw - 24px))',
-    'padding:8px 10px',
-    'border:1px solid rgba(15,23,42,.12)',
-    'border-radius:10px',
-    'background:rgba(255,255,255,.94)',
-    'box-shadow:0 8px 24px rgba(15,23,42,.12)',
-    'color:#0f172a',
-    'font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-    'display:flex',
-    'align-items:center',
-    'gap:10px',
-    'backdrop-filter:blur(16px)'
-  ].join(';');
-
-  const summary = document.createElement('div');
-  summary.style.cssText = 'display:flex;align-items:center;gap:8px;min-width:0;flex:1';
-  const statusEl = document.createElement('strong');
-  statusEl.style.fontSize = '12px';
-  statusEl.textContent = statusText;
-  const tagsEl = document.createElement('span');
-  tagsEl.style.cssText = 'color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-  tagsEl.textContent = tagText;
-  summary.append(statusEl, tagsEl);
-  root.append(summary);
-
-  const chips = document.createElement('div');
-  chips.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap';
-  for (const destination of payload.destinations.filter((item) => item.status !== 'skipped' || item.message.startsWith('Already'))) {
-    const chip = document.createElement('span');
-    const color = destination.status === 'success' ? '#0f766e' : destination.status === 'skipped' ? '#64748b' : '#b45309';
-    chip.title = destination.error || destination.message;
-    chip.textContent = destination.label;
-    chip.style.cssText = `border:1px solid rgba(15,23,42,.1);border-radius:999px;padding:3px 7px;color:${color};background:rgba(248,250,252,.92);font-weight:600`;
-    chips.append(chip);
-  }
-  root.append(chips);
-
-  const actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;align-items:center;gap:4px';
-
-  const reader = payload.destinations.find((destination) => destination.label === 'Readwise Reader' && destination.status === 'success');
-  if (reader?.url) {
-    const openReader = document.createElement('button');
-    openReader.type = 'button';
-    openReader.textContent = 'Reader';
-    openReader.style.cssText = 'border:0;background:transparent;color:#4f46e5;font:inherit;font-weight:700;cursor:pointer;padding:4px 6px';
-    openReader.addEventListener('click', () => window.open(reader.url, '_blank', 'noopener,noreferrer'));
-    actions.append(openReader);
-  }
-
-  const pinboard = payload.destinations.find((destination) => destination.label === 'Pinboard' && destination.status === 'success');
-  if (pinboard?.url) {
-    const openPinboard = document.createElement('button');
-    openPinboard.type = 'button';
-    openPinboard.textContent = 'Pinboard';
-    openPinboard.style.cssText = 'border:0;background:transparent;color:#4f46e5;font:inherit;font-weight:700;cursor:pointer;padding:4px 6px';
-    openPinboard.addEventListener('click', () => window.open(pinboard.url, '_blank', 'noopener,noreferrer'));
-    actions.append(openPinboard);
-  }
-
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.textContent = 'Dismiss';
-  close.style.cssText = 'border:0;background:transparent;color:#64748b;font:inherit;cursor:pointer;padding:4px 6px';
-  close.addEventListener('click', () => root.remove());
-  actions.append(close);
-  root.append(actions);
-
-  document.documentElement.append(root);
-  if (!hasError) setTimeout(() => root.remove(), 8000);
-}
-
 async function showCaptureStatus(tabId: number, result: CaptureResult): Promise<void> {
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
-      func: renderCaptureStatus,
-      args: [{
-        title: result.item.title,
-        url: result.item.url,
-        tags: result.tags,
-        destinations: result.destinations
-      }]
+      files: ['content/toast.js']
     });
+    await chrome.tabs.sendMessage(tabId, { type: SHOW_CAPTURE, capture: result });
   } catch (err) {
     console.warn('Could not render capture status UI', err);
   }
@@ -263,6 +166,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (targets.goodlinks) goodlinksCount = await exportToGoodlinks(items);
       if (targets.readwise) readwiseCount = await exportToReadwise(items);
       sendResponse({ ok: true, goodlinksCount, readwiseCount });
+    } else if (msg?.type === RETRY_DESTINATION) {
+      const capture = await retryDestination(String(msg.itemId || ''), msg.destinationId);
+      sendResponse({ ok: true, capture });
+    } else if (msg?.type === UPDATE_TAGS) {
+      const tags = Array.isArray(msg.tags) ? msg.tags.map(String) : [];
+      const capture = await updateCapturedTags(String(msg.itemId || ''), tags);
+      sendResponse({ ok: true, capture });
     }
   })().catch((err) => sendResponse({ ok: false, error: String(err) }));
   return true;

@@ -1,8 +1,9 @@
-import { findItemByUrl, getSettings, getSyncRecord, getTags, setSyncRecord, upsertItem, updateTags } from '@common/storage';
+import { findItemByUrl, getItem, getSettings, getSyncRecord, getTags, setSyncRecord, upsertItem, updateTags } from '@common/storage';
 import { captureSyncFingerprint } from '@common/capture';
 import { selectExcerpt } from '@common/preview';
-import type { CaptureDestinationResult, CaptureResult } from '@common/capture';
-import type { Item, SyncRecord } from '@common/types';
+import { parseTagInput } from '@common/tags-input';
+import type { CaptureDestinationId, CaptureDestinationResult, CaptureResult } from '@common/capture';
+import type { Item, Settings, SyncRecord } from '@common/types';
 import { generateTags } from './llm';
 import { canonicalizeTags, slugify } from './tags';
 import { addToPinboard } from './pinboard';
@@ -57,50 +58,138 @@ async function alreadySynced(item: Item, service: SyncRecord['service'], fingerp
   return Boolean(record?.status === 'ok' && record.lastHash === fingerprint);
 }
 
+function localDestination(item: Item, existingItem?: Item, unchangedExistingItem = false): CaptureDestinationResult {
+  return destination(
+    'local',
+    'Local library',
+    'success',
+    unchangedExistingItem ? 'Already saved locally' : existingItem ? 'Updated local item' : 'Saved locally'
+  );
+}
+
+async function incrementKnownTags(knownMap: Awaited<ReturnType<typeof getTags>>, tags: string[], previous: string[] = []): Promise<void> {
+  let changed = false;
+  for (const t of tags) {
+    if (previous.includes(t)) continue;
+    knownMap[t] = knownMap[t] || { slug: t, count: 0 };
+    knownMap[t].count += 1;
+    changed = true;
+  }
+  if (changed) await updateTags(knownMap);
+}
+
+async function knownTagNames(settings: Settings): Promise<{ known: string[]; knownMap: Awaited<ReturnType<typeof getTags>> }> {
+  const knownMap = await getTags();
+  const known = Object.keys(knownMap)
+    .sort((a, b) => (knownMap[b]?.count || 0) - (knownMap[a]?.count || 0))
+    .slice(0, settings.tagging.knownTagLimit);
+  return { known, knownMap };
+}
+
+function normalizeTags(candidates: string[], known: string[], settings: Settings): string[] {
+  return canonicalizeTags(candidates, known, settings).map(slugify).filter(Boolean);
+}
+
+async function syncPinboard(item: Item, fingerprint: string, force: boolean): Promise<CaptureDestinationResult> {
+  const settings = await getSettings();
+  if (!settings.pinboard.authTokenRef) {
+    return destination('pinboard', 'Pinboard', 'skipped', 'Pinboard token not configured');
+  }
+
+  try {
+    if (!force && await alreadySynced(item, 'pinboard', fingerprint)) {
+      return destination('pinboard', 'Pinboard', 'skipped', 'Already synced to Pinboard', { url: 'https://pinboard.in/' });
+    }
+    await addToPinboard(item);
+    item.status = 'synced';
+    await upsertItem(item);
+    await markSync(item, 'pinboard', 'ok', fingerprint);
+    return destination('pinboard', 'Pinboard', 'success', 'Saved to Pinboard', { url: 'https://pinboard.in/' });
+  } catch (err) {
+    await markSync(item, 'pinboard', 'error', fingerprint, errorMessage(err));
+    return destination('pinboard', 'Pinboard', 'error', 'Pinboard save failed', { error: errorMessage(err) });
+  }
+}
+
+async function syncReadwise(item: Item, fingerprint: string, force: boolean): Promise<CaptureDestinationResult> {
+  const settings = await getSettings();
+  if (!settings.readwise?.saveOnCapture) {
+    return destination('readwise', 'Readwise Reader', 'skipped', 'Readwise capture disabled');
+  }
+  if (!settings.readwise.apiTokenRef) {
+    return destination('readwise', 'Readwise Reader', 'error', 'Readwise capture enabled but token is missing');
+  }
+
+  try {
+    if (!force && await alreadySynced(item, 'readwise', fingerprint)) {
+      return destination('readwise', 'Readwise Reader', 'skipped', 'Already synced to Readwise Reader', {
+        url: item.readwiseDocumentId ? `https://read.readwise.io/read/${item.readwiseDocumentId}` : 'https://readwise.io/read'
+      });
+    }
+    const saved = await saveToReadwiseReader(readwiseInputFromItem(item));
+    if (saved.id && saved.id !== item.readwiseDocumentId) {
+      item.readwiseDocumentId = saved.id;
+      await upsertItem(item);
+    }
+    await markSync(item, 'readwise', 'ok', fingerprint);
+    return destination(
+      'readwise',
+      'Readwise Reader',
+      saved.alreadyExists ? 'success' : 'success',
+      saved.alreadyExists ? 'Updated Readwise Reader' : 'Saved to Readwise Reader',
+      { url: saved.url || (saved.id ? `https://read.readwise.io/read/${saved.id}` : 'https://readwise.io/read') }
+    );
+  } catch (err) {
+    await markSync(item, 'readwise', 'error', fingerprint, errorMessage(err));
+    return destination('readwise', 'Readwise Reader', 'error', 'Readwise save failed', { error: errorMessage(err) });
+  }
+}
+
+async function syncConfiguredDestinations(item: Item, force: boolean): Promise<CaptureDestinationResult[]> {
+  const fingerprint = captureSyncFingerprint(item);
+  return [
+    await syncPinboard(item, fingerprint, force),
+    await syncReadwise(item, fingerprint, force)
+  ];
+}
+
+function captureResult(item: Item, llm: CaptureDestinationResult, local: CaptureDestinationResult, synced: CaptureDestinationResult[]): CaptureResult {
+  return { item, tags: item.tags, destinations: [local, llm, ...synced] };
+}
+
 export async function captureAndSync(input: { url: string; title: string; domain: string; text?: string }): Promise<CaptureResult> {
   const settings = await getSettings();
-  const knownMap = await getTags();
-  const known = Object.keys(knownMap).sort((a, b) => (knownMap[b]?.count || 0) - (knownMap[a]?.count || 0)).slice(0, settings.tagging.knownTagLimit);
-
+  const { known, knownMap } = await knownTagNames(settings);
   const excerpt = selectExcerpt(input.text, settings.privacy.mode, settings.llm.maxChars);
-
   const existingItem = await findItemByUrl(input.url);
   const canReuseExistingTags = Boolean(existingItem?.tags.length
     && existingItem.title === input.title
     && existingItem.domain === input.domain
     && (existingItem.excerpt || '') === (excerpt || ''));
 
-  const destinations: CaptureDestinationResult[] = [];
   let tags: string[];
+  let llmDest: CaptureDestinationResult;
   if (canReuseExistingTags) {
     tags = existingItem!.tags;
-    destinations.push(destination('llm', 'LLM tags', 'skipped', 'Reused existing tags'));
+    llmDest = destination('llm', 'LLM tags', 'skipped', 'Reused existing tags');
   } else {
     try {
-      tags = canonicalizeTags(
+      tags = normalizeTags(
         await generateTags({ title: input.title, url: input.url, domain: input.domain, excerpt, knownTags: known }),
         known,
         settings
-      ).map(slugify).filter(Boolean);
-      destinations.push(destination(
+      );
+      llmDest = destination(
         'llm',
         'LLM tags',
         'success',
         tags.length ? `Tagged: ${tags.slice(0, 5).join(', ')}` : 'No tags generated'
-      ));
+      );
+      await incrementKnownTags(knownMap, tags, existingItem?.tags);
     } catch (err) {
       tags = existingItem?.tags || [];
-      destinations.push(destination('llm', 'LLM tags', 'error', 'Tagging failed', { error: errorMessage(err) }));
+      llmDest = destination('llm', 'LLM tags', 'error', 'Tagging failed', { error: errorMessage(err) });
     }
-  }
-
-  if (!canReuseExistingTags && destinations.at(-1)?.status === 'success') {
-    for (const t of tags) {
-      if (existingItem?.tags.includes(t)) continue;
-      knownMap[t] = knownMap[t] || { slug: t, count: 0 };
-      knownMap[t].count += 1;
-    }
-    await updateTags(knownMap);
   }
 
   const unchangedExistingItem = existingItem
@@ -121,55 +210,103 @@ export async function captureAndSync(input: { url: string; title: string; domain
   delete item.lastError;
   await upsertItem(item);
 
-  destinations.unshift(
-    destination('local', 'Local library', 'success', unchangedExistingItem ? 'Already saved locally' : existingItem ? 'Updated local item' : 'Saved locally')
+  return captureResult(
+    item,
+    llmDest,
+    localDestination(item, existingItem, unchangedExistingItem),
+    await syncConfiguredDestinations(item, false)
   );
+}
+
+export async function retryDestination(itemId: string, destinationId: CaptureDestinationId): Promise<CaptureResult> {
+  const item = await getItem(itemId);
+  if (!item) throw new Error('Saved item not found');
+  const settings = await getSettings();
   const fingerprint = captureSyncFingerprint(item);
 
-  if (settings.pinboard.authTokenRef) {
+  if (destinationId === 'llm') {
+    const { known, knownMap } = await knownTagNames(settings);
     try {
-      if (await alreadySynced(item, 'pinboard', fingerprint)) {
-        destinations.push(destination('pinboard', 'Pinboard', 'skipped', 'Already synced to Pinboard', { url: 'https://pinboard.in/' }));
-      } else if (unchangedExistingItem && existingItem?.status === 'synced') {
-        await markSync(item, 'pinboard', 'ok', fingerprint);
-        destinations.push(destination('pinboard', 'Pinboard', 'skipped', 'Already synced to Pinboard', { url: 'https://pinboard.in/' }));
-      } else {
-        await addToPinboard(item);
-        item.status = 'synced';
-        await upsertItem(item);
-        await markSync(item, 'pinboard', 'ok', fingerprint);
-        destinations.push(destination('pinboard', 'Pinboard', 'success', 'Saved to Pinboard', { url: 'https://pinboard.in/' }));
-      }
+      const tags = normalizeTags(
+        await generateTags({
+          title: item.title,
+          url: item.url,
+          domain: item.domain,
+          excerpt: item.excerpt,
+          knownTags: known
+        }),
+        known,
+        settings
+      );
+      const previous = item.tags;
+      item.tags = tags;
+      item.contentHash = captureSyncFingerprint(item);
+      item.status = 'tagged';
+      delete item.lastError;
+      await incrementKnownTags(knownMap, tags, previous);
+      await upsertItem(item);
+      const synced = await syncConfiguredDestinations(item, true);
+      return captureResult(
+        item,
+        destination('llm', 'LLM tags', 'success', tags.length ? `Tagged: ${tags.slice(0, 5).join(', ')}` : 'No tags generated'),
+        localDestination(item, item, false),
+        synced
+      );
     } catch (err) {
-      await markSync(item, 'pinboard', 'error', fingerprint, errorMessage(err));
-      destinations.push(destination('pinboard', 'Pinboard', 'error', 'Pinboard save failed', { error: errorMessage(err) }));
+      return captureResult(
+        item,
+        destination('llm', 'LLM tags', 'error', 'Tagging failed', { error: errorMessage(err) }),
+        localDestination(item, item, true),
+        await syncConfiguredDestinations(item, false)
+      );
     }
-  } else {
-    destinations.push(destination('pinboard', 'Pinboard', 'skipped', 'Pinboard token not configured'));
   }
 
-  if (settings.readwise?.saveOnCapture) {
-    if (!settings.readwise.apiTokenRef) {
-      destinations.push(destination('readwise', 'Readwise Reader', 'error', 'Readwise capture enabled but token is missing'));
-    } else {
-      try {
-        if (await alreadySynced(item, 'readwise', fingerprint)) {
-          destinations.push(destination('readwise', 'Readwise Reader', 'skipped', 'Already synced to Readwise Reader', { url: 'https://readwise.io/read' }));
-        } else {
-          await saveToReadwiseReader(readwiseInputFromItem(item));
-          await markSync(item, 'readwise', 'ok', fingerprint);
-          destinations.push(destination('readwise', 'Readwise Reader', 'success', 'Saved to Readwise Reader', { url: 'https://readwise.io/read' }));
-        }
-      } catch (err) {
-        await markSync(item, 'readwise', 'error', fingerprint, errorMessage(err));
-        destinations.push(destination('readwise', 'Readwise Reader', 'error', 'Readwise save failed', { error: errorMessage(err) }));
-      }
-    }
-  } else {
-    destinations.push(destination('readwise', 'Readwise Reader', 'skipped', 'Readwise capture disabled'));
+  if (destinationId === 'pinboard') {
+    const pinboard = await syncPinboard(item, fingerprint, true);
+    const readwise = await syncReadwise(item, fingerprint, false);
+    return captureResult(
+      item,
+      destination('llm', 'LLM tags', item.tags.length ? 'success' : 'skipped', item.tags.length ? `Tagged: ${item.tags.slice(0, 5).join(', ')}` : 'No tags'),
+      localDestination(item, item, true),
+      [pinboard, readwise]
+    );
   }
 
-  return { item, tags, destinations };
+  if (destinationId === 'readwise') {
+    const pinboard = await syncPinboard(item, fingerprint, false);
+    const readwise = await syncReadwise(item, fingerprint, true);
+    return captureResult(
+      item,
+      destination('llm', 'LLM tags', item.tags.length ? 'success' : 'skipped', item.tags.length ? `Tagged: ${item.tags.slice(0, 5).join(', ')}` : 'No tags'),
+      localDestination(item, item, true),
+      [pinboard, readwise]
+    );
+  }
+
+  throw new Error(`Cannot retry ${destinationId}`);
+}
+
+export async function updateCapturedTags(itemId: string, incoming: string[]): Promise<CaptureResult> {
+  const item = await getItem(itemId);
+  if (!item) throw new Error('Saved item not found');
+  const settings = await getSettings();
+  const { known, knownMap } = await knownTagNames(settings);
+  const tags = normalizeTags(parseTagInput(incoming.join(',')), known, settings);
+  const previous = item.tags;
+  item.tags = tags;
+  item.contentHash = captureSyncFingerprint(item);
+  item.status = 'tagged';
+  delete item.lastError;
+  await incrementKnownTags(knownMap, tags, previous);
+  await upsertItem(item);
+  const synced = await syncConfiguredDestinations(item, true);
+  return captureResult(
+    item,
+    destination('llm', 'LLM tags', 'skipped', 'Tags updated'),
+    localDestination(item, item, false),
+    synced
+  );
 }
 
 export async function tagAndMaybeSync(input: { url: string; title: string; domain: string; text?: string }): Promise<Item> {

@@ -13,9 +13,10 @@
 - **Inspire new ideas.** Beyond summaries, the assistant can remix your saved content: propose blog outlines, connect disparate articles, prompt you with “What if…” questions—anything that nudges you to create rather than collect.
 
 ### Feature List
-- Capture the current tab and extract readable content (`article`/`main`, then body text). Drop a Mozilla Readability build into `static/readability.js` for higher-quality extraction.
+- Capture the current tab and extract readable content with bundled Mozilla Readability, falling back to `article`/`main` text.
 - Auto-tag new items by calling an OpenAI-compatible `chat/completions` endpoint that you configure at runtime—no hard-coded hosts, no forced vendors.
-- Sync saved items to Pinboard (including tag import/export), with GoodLinks and Readwise exports on deck.
+- Sync saved items to Pinboard (including tag import/export). Readwise Reader creates or updates the existing document, including tags.
+- After save, a page toast can retry a failed destination and edit tags.
 - Store everything locally; no backend service required.
 - Navigate a full options dashboard for configuring LLM models, privacy modes, tag behaviour, and integrations.
 - Inspect the Options-page Data Preview before saving: it shows local storage, Chrome sync storage, configured outbound API destinations, privacy-mode payload fields, and screenshot-safe secret states.
@@ -27,13 +28,15 @@
 - `pnpm build` for a one-off bundle (or `pnpm watch` while hacking).
 - Load the unpacked extension from the freshly created `dist/` directory in Chrome.
 - Hop into the Options page to plug in your LLM base URL, model name, and optional API key; paste your Pinboard token; choose how much content is shared with the LLM.
-- Page extraction prefers Mozilla Readability if you replace `static/readability.js` with the real library. Otherwise it uses `article`/`main` text, then `document.body.innerText`.
+- Page extraction uses the bundled Mozilla Readability library, then `article`/`main` text, then `document.body.innerText`.
 
 ### Packaging & Release Ritual
 - Bump version in `package.json` (the build script mirrors it into `dist/manifest.json` automatically).
 - `npm run build` then `npm run package` (see `scripts/package.mjs`) to produce `tldr-v<version>.zip`.
 - Upload to the Chrome Web Store with updated screenshots and data-collection notes. Use the Options-page Data Preview as the product-visible source for privacy fields: it distinguishes local data, synced settings, user-configured remote API calls, and the absence of remotely hosted executable code.
 - Tag the release (`git tag v<version> && git push origin --tags`), draft GitHub notes, and attach the zip for sideloaders.
+
+Page extraction bundles [Mozilla Readability](https://github.com/mozilla/readability) (Apache-2.0).
 
 ### Contributing & Feedback
 - I’m dogfooding the tool to tame my own reading queue, but the north star is a community-sourced thinking partner. Open issues for features you crave, integrations you rely on, or moments where the flow breaks.
