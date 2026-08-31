@@ -110,7 +110,11 @@ export async function captureAndSync(input: { url: string; title: string; domain
   ];
   const fingerprint = captureSyncFingerprint(item);
 
-  if (settings.pinboard.authTokenRef) {
+  if (settings.pinboard.saveOnCapture === false) {
+    destinations.push(destination('pinboard', 'Pinboard', 'skipped', 'Pinboard capture disabled'));
+  } else if (!settings.pinboard.authTokenRef) {
+    destinations.push(destination('pinboard', 'Pinboard', 'skipped', 'Pinboard token not configured'));
+  } else {
     try {
       if (await alreadySynced(item, 'pinboard', fingerprint)) {
         destinations.push(destination('pinboard', 'Pinboard', 'skipped', 'Already synced to Pinboard', { url: 'https://pinboard.in/' }));
@@ -128,8 +132,6 @@ export async function captureAndSync(input: { url: string; title: string; domain
       await markSync(item, 'pinboard', 'error', fingerprint, errorMessage(err));
       destinations.push(destination('pinboard', 'Pinboard', 'error', 'Pinboard save failed', { error: errorMessage(err) }));
     }
-  } else {
-    destinations.push(destination('pinboard', 'Pinboard', 'skipped', 'Pinboard token not configured'));
   }
 
   if (settings.readwise?.saveOnCapture) {

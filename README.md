@@ -15,7 +15,7 @@
 ### Feature List
 - Capture the current tab and extract readable content with the built-in readability fallback.
 - Auto-tag new items by calling an OpenAI-compatible `chat/completions` endpoint that you configure at runtime—no hard-coded hosts, no forced vendors.
-- Sync saved items to Pinboard (including tag import/export), with GoodLinks and Readwise exports on deck.
+- Optionally save new captures to Pinboard and/or Readwise Reader. Import Pinboard tags, and export selected items to GoodLinks or Readwise.
 - Store everything locally; no backend service required.
 - Navigate a full options dashboard for configuring LLM models, privacy modes, tag behaviour, and integrations.
 - Inspect the Options-page Data Preview before saving: it shows local storage, Chrome sync storage, configured outbound API destinations, privacy-mode payload fields, and screenshot-safe secret states.
@@ -25,7 +25,7 @@
 - `npm install` to pull dependencies.
 - `npm run build` for a one-off bundle (or `npm run watch` while hacking).
 - Load the unpacked extension from the freshly created `dist/` directory in Chrome.
-- Hop into the Options page to plug in your LLM base URL, model name, and optional API key; paste your Pinboard token; choose how much content is shared with the LLM.
+- Hop into the Options page to plug in your LLM base URL, model name, and optional API key. Paste Pinboard and Readwise tokens only if you want those destinations, then use the capture checkboxes to enable or skip them on save.
 
 ### Packaging & Release Ritual
 - Bump version in `package.json` (the build script mirrors it into `dist/manifest.json` automatically).

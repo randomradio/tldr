@@ -12,6 +12,7 @@ export interface Settings {
     authTokenRef?: string;
     shared: boolean;
     toread: boolean;
+    saveOnCapture?: boolean;
   };
   readwise?: {
     apiTokenRef?: string;
