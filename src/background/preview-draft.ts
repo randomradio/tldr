@@ -7,6 +7,7 @@ export type PreviewDraft = {
   llmMaxChars?: number;
   privacyMode?: PrivacyMode;
   pinboardConfigured?: boolean;
+  pinboardCaptureEnabled?: boolean;
   readwiseConfigured?: boolean;
   readwiseCaptureEnabled?: boolean;
   exportTargets?: ExportTargets;

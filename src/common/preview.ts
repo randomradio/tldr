@@ -47,6 +47,7 @@ export interface ExportTargets {
 
 export interface DestinationState {
   pinboardConfigured: boolean;
+  pinboardCaptureEnabled?: boolean;
   readwiseConfigured: boolean;
   readwiseCaptureEnabled?: boolean;
   exportTargets?: ExportTargets;
@@ -141,6 +142,7 @@ export function buildDestinationPreviews(settings: Settings, state: DestinationS
   })();
 
   const exportTargets = state.exportTargets || {};
+  const pinboardRequested = state.pinboardCaptureEnabled !== false;
   const readwiseRequested = Boolean(state.readwiseCaptureEnabled || exportTargets.readwise);
   const readwiseReceives = state.readwiseCaptureEnabled
     ? ['page URL', 'title', 'tags', 'summary or excerpt', 'source']
@@ -159,11 +161,13 @@ export function buildDestinationPreviews(settings: Settings, state: DestinationS
     {
       id: 'pinboard',
       label: 'Pinboard',
-      status: state.pinboardConfigured ? 'active' : 'not_configured',
-      statusText: state.pinboardConfigured
-        ? 'Token configured. Save may sync bookmarks to Pinboard.'
-        : 'Not configured. Pinboard will not receive data.',
-      receives: state.pinboardConfigured
+      status: pinboardRequested ? (state.pinboardConfigured ? 'active' : 'not_configured') : 'disabled',
+      statusText: pinboardRequested
+        ? state.pinboardConfigured
+          ? 'Enabled for new captures.'
+          : 'Requested but token is not configured.'
+        : 'Not selected. Pinboard will not receive data.',
+      receives: pinboardRequested && state.pinboardConfigured
         ? ['page URL', 'title', 'tags', 'short excerpt', 'shared/toread flags']
         : []
     },

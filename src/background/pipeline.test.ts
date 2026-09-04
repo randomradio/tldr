@@ -217,6 +217,20 @@ describe('captureAndSync', () => {
     expect(result.item.status).toBe('synced');
   });
 
+  it('skips Pinboard when capture is disabled even if a token is set', async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      ...settings,
+      pinboard: { ...settings.pinboard, authTokenRef: 'pin_token', saveOnCapture: false }
+    });
+
+    const result = await captureAndSync(input);
+    expect(addToPinboard).not.toHaveBeenCalled();
+    expect(result.destinations.find((destination) => destination.id === 'pinboard')).toMatchObject({
+      status: 'skipped',
+      message: 'Pinboard capture disabled'
+    });
+  });
+
   it('errors when Readwise capture is enabled without a token', async () => {
     vi.mocked(getSettings).mockResolvedValue({
       ...settings,

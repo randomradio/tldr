@@ -191,6 +191,25 @@ describe('buildDestinationPreviews', () => {
       receives: []
     });
   });
+
+  it('shows Pinboard as disabled when capture is turned off', () => {
+    const destinations = buildDestinationPreviews(baseSettings, {
+      pinboardConfigured: true,
+      pinboardCaptureEnabled: false,
+      readwiseConfigured: true,
+      readwiseCaptureEnabled: false,
+      exportTargets: { goodlinks: false, readwise: false }
+    });
+
+    expect(destinations.find((destination) => destination.id === 'pinboard')).toMatchObject({
+      status: 'disabled',
+      receives: []
+    });
+    expect(destinations.find((destination) => destination.id === 'readwise')).toMatchObject({
+      status: 'disabled',
+      receives: []
+    });
+  });
 });
 
 describe('buildDataPreview', () => {

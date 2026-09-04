@@ -21,6 +21,7 @@ async function previewCurrentTab(draft?: PreviewDraft) {
   const previewSettings = settingsWithPreviewDraft(settings, draft);
   const state: DestinationState = {
     pinboardConfigured: draft?.pinboardConfigured ?? Boolean(settings.pinboard.authTokenRef),
+    pinboardCaptureEnabled: draft?.pinboardCaptureEnabled ?? settings.pinboard.saveOnCapture !== false,
     readwiseConfigured: draft?.readwiseConfigured ?? Boolean(settings.readwise?.apiTokenRef),
     readwiseCaptureEnabled: draft?.readwiseCaptureEnabled ?? Boolean(settings.readwise?.saveOnCapture),
     exportTargets: draft?.exportTargets

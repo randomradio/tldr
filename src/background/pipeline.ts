@@ -92,6 +92,9 @@ function normalizeTags(candidates: string[], known: string[], settings: Settings
 
 async function syncPinboard(item: Item, fingerprint: string, force: boolean): Promise<CaptureDestinationResult> {
   const settings = await getSettings();
+  if (settings.pinboard.saveOnCapture === false) {
+    return destination('pinboard', 'Pinboard', 'skipped', 'Pinboard capture disabled');
+  }
   if (!settings.pinboard.authTokenRef) {
     return destination('pinboard', 'Pinboard', 'skipped', 'Pinboard token not configured');
   }

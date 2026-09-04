@@ -141,6 +141,7 @@ describe('getSettings and setSettings', () => {
     const settings = await getSettings();
     expect(settings.privacy.mode).toBe('title_excerpt');
     expect(settings.llm.model).toBe('kimi-k2-0905-preview');
+    expect(settings.pinboard.saveOnCapture).toBe(true);
     expect(settings.readwise?.saveOnCapture).toBe(false);
   });
 
