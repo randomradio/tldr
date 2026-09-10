@@ -143,6 +143,7 @@ describe('getSettings and setSettings', () => {
     expect(settings.llm.model).toBe('kimi-k2-0905-preview');
     expect(settings.pinboard.saveOnCapture).toBe(true);
     expect(settings.readwise?.saveOnCapture).toBe(false);
+    expect(settings.readwise?.saveOnCapture).toBe(false);
   });
 
   it('rejects when chrome.storage reports lastError', async () => {

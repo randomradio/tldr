@@ -1,12 +1,12 @@
 # Chrome Web Store Publishing Checklist
 
-Last updated: 2026-06-22
+Last updated: 2026-09-10
 
 This checklist records the current Chrome Web Store publishing flow for `tldr`.
 
 ## Current Upload Artifact
 
-- Package: `tldr-v0.1.1.zip`
+- Package: `tldr-v0.1.5.zip`
 - Build source: `dist/`
 - Required ZIP invariant: `manifest.json` must be at the ZIP root.
 - Current local validation already performed on 2026-06-12:
@@ -14,7 +14,7 @@ This checklist records the current Chrome Web Store publishing flow for `tldr`.
   - `pnpm exec tsc --noEmit`
   - `pnpm build`
   - `pnpm package`
-  - `unzip -l tldr-v0.1.1.zip`
+  - `unzip -l tldr-v0.1.5.zip`
 
 ## Before Upload
 
@@ -43,7 +43,7 @@ This checklist records the current Chrome Web Store publishing flow for `tldr`.
 ## Store Listing
 
 - [ ] Create or update the item in the Chrome Web Store Developer Dashboard.
-- [ ] Upload `tldr-v0.1.1.zip`.
+- [ ] Upload `tldr-v0.1.5.zip`.
 - [ ] Add a short description.
 - [ ] Add a full description covering:
   - Save the current page.
