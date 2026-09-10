@@ -15,7 +15,8 @@
 ### Feature List
 - Capture the current tab and extract readable content with bundled Mozilla Readability, falling back to `article`/`main` text.
 - Auto-tag new items by calling an OpenAI-compatible `chat/completions` endpoint that you configure at runtime—no hard-coded hosts, no forced vendors.
-- Optionally save new captures to Pinboard and/or Readwise Reader. Import Pinboard tags, and export selected items to GoodLinks or Readwise.
+- Save new captures to Pinboard by default when a token is configured. Readwise Reader can stay enabled as an optional destination; it is off unless you turn it on.
+- Import Pinboard tags, and export selected items to GoodLinks or Readwise.
 - Readwise Reader creates or updates the existing document, including tags.
 - After save, a page toast can retry a failed destination and edit tags.
 - Store everything locally; no backend service required.
@@ -28,7 +29,7 @@
 - `pnpm test` and `pnpm typecheck` for the current automated checks.
 - `pnpm build` for a one-off bundle (or `pnpm watch` while hacking).
 - Load the unpacked extension from the freshly created `dist/` directory in Chrome.
-- Hop into the Options page to plug in your LLM base URL, model name, and optional API key. Paste Pinboard and Readwise tokens only if you want those destinations, then use the capture checkboxes to enable or skip them on save.
+- Hop into the Options page to plug in your LLM base URL, model name, and optional API key. Paste a Pinboard token to save tagged links there by default. Readwise is optional and stays off until you enable it.
 - Page extraction uses the bundled Mozilla Readability library, then `article`/`main` text, then `document.body.innerText`.
 
 ### Packaging & Release Ritual
